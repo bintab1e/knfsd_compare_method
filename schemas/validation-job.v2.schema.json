@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KNFSd runtime validation job with explicit adapter",
+  "type": "object",
+  "required": ["candidate_id", "kernel_ref", "sanitizer", "remote_trigger", "target_functions", "target_pcs", "required_configuration", "required_capabilities", "validation_adapter", "execution", "success_conditions"],
+  "properties": {
+    "candidate_id": {"type": "string"},
+    "kernel_ref": {"const": "v7.3"},
+    "sanitizer": {"enum": ["kasan", "kcsan"]},
+    "remote_trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "rpc_program", "procedure", "operation", "transport", "authentication", "request_shape", "preconditions"],
+      "properties": {
+        "protocol_version": {"type": ["string", "null"]},
+        "rpc_program": {"type": ["string", "null"]},
+        "procedure": {"type": ["string", "null"]},
+        "operation": {"type": ["string", "null"]},
+        "transport": {"type": ["string", "null"]},
+        "authentication": {"type": ["string", "null"]},
+        "request_shape": {"type": "string"},
+        "preconditions": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "target_functions": {"type": "array", "items": {"type": "string"}},
+    "target_pcs": {"type": "array", "items": {"type": ["string", "integer"]}},
+    "required_configuration": {"type": "array", "items": {"type": "string"}},
+    "required_capabilities": {"type": "array", "items": {"type": "string"}},
+    "validation_adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "adapter_id", "source_path", "symbol", "program_path", "reason"],
+      "properties": {
+        "kind": {"enum": ["rpc_template", "syzkaller_stage1", "unavailable"]},
+        "adapter_id": {"type": ["string", "null"]},
+        "source_path": {"type": ["string", "null"]},
+        "symbol": {"type": ["string", "null"]},
+        "program_path": {"type": ["string", "null"]},
+        "reason": {"type": ["string", "null"]}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "max_runs", "concurrency", "timeout_seconds", "require_target_reached", "effective_run_definition"],
+      "properties": {
+        "mode": {"enum": ["replay", "directed_fuzz", "concurrent_replay"]},
+        "max_runs": {"type": "integer", "minimum": 1, "maximum": 100},
+        "concurrency": {"type": "integer", "minimum": 1},
+        "timeout_seconds": {"type": "integer", "minimum": 1},
+        "require_target_reached": {"type": "boolean"},
+        "effective_run_definition": {"type": "string"}
+      }
+    },
+    "success_conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_reached_evidence", "sanitizer_signal", "terminal_labels"],
+      "properties": {
+        "target_reached_evidence": {"type": "array", "items": {"type": "string"}},
+        "sanitizer_signal": {"type": "string"},
+        "terminal_labels": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "additionalProperties": false
+}

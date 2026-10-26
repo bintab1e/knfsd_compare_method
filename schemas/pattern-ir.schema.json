@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KNFSd vulnerability Pattern IR",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pattern_id", "version", "family", "member_cases", "member_mappings", "shared_model", "target_scope", "known_variations", "exclusions", "rule_variants", "validator_types", "lineage"],
+  "properties": {
+    "pattern_id": {"type": "string", "pattern": "^PATTERN-"},
+    "version": {"type": "integer", "minimum": 1},
+    "family": {"type": "string"},
+    "member_cases": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "member_mappings": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "shared_model": {
+      "type": "object",
+      "required": ["attacker_controlled_input", "root_cause", "dangerous_operations", "violated_invariant"],
+      "properties": {
+        "attacker_controlled_input": {"type": "string"},
+        "root_cause": {"type": "string"},
+        "dangerous_operations": {"type": "array", "items": {"type": "string"}},
+        "violated_invariant": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "target_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["components", "protocol_versions", "remote_entrypoints", "files", "functions", "config_constraints"],
+      "properties": {
+        "components": {"type": "array", "items": {"type": "string"}},
+        "protocol_versions": {"type": "array", "items": {"type": "string"}},
+        "remote_entrypoints": {"type": "array", "items": {"type": "string"}},
+        "files": {"type": "array", "items": {"type": "string"}},
+        "functions": {"type": "array", "items": {"type": "string"}},
+        "config_constraints": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "known_variations": {"type": "array", "items": {"type": "string"}},
+    "exclusions": {"type": "array", "items": {"type": "string"}},
+    "rule_variants": {"type": "array", "items": {"type": "string"}},
+    "validator_types": {"type": "array", "items": {"type": "string"}},
+    "lineage": {
+      "type": "object",
+      "required": ["derived_from", "supersedes", "split_reason"],
+      "properties": {
+        "derived_from": {"type": "array", "items": {"type": "string"}},
+        "supersedes": {"type": "array", "items": {"type": "string"}},
+        "split_reason": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    }
+  }
+}

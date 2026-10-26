@@ -1,0 +1,21 @@
+schema_version: "1.0.0"
+rpc_templates:
+  nfsd4_decode_setclientid:
+    target_function: nfsd4_decode_setclientid
+    protocol_versions: [nfs4.0]
+  nfsd4_decode_verify:
+    target_function: nfsd4_decode_verify
+    protocol_versions: [nfs4.0, nfs4.1, nfs4.2]
+  svcauth_gss_legacy_init:
+    target_function: svcauth_gss_legacy_init
+    protocol_versions: [nfs3, nfs4.0, nfs4.1, nfs4.2]
+syzkaller_stage1:
+  repository: external/knfsd-syzkaller
+  python: external/knfsd-syzkaller/.venv/bin/python
+  config: validation/stage1.json
+  module: agent_pipeline.stage1
+  policies:
+    kasan: kasan-default
+    kcsan: kcsan-default
+  kernel_commit: c03c1a14507dfaf8b856c2608f9ac216021fc222
+terminal_on_missing_capability: harness_gap

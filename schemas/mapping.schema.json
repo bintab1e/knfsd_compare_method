@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Case-to-KNFSd mapping",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mapping_id", "case_id", "target", "status", "target_semantics", "target_code", "transferred_invariant", "required_config", "evidence_refs", "confidence"],
+  "properties": {
+    "mapping_id": {"type": "string"},
+    "case_id": {"type": "string"},
+    "target": {"const": "linux-knfsd-v7.3"},
+    "status": {"enum": ["direct", "semantic", "conditional", "not_applicable", "insufficient_evidence", "invalid_target"]},
+    "target_semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_versions", "rpc_programs", "procedures", "operations", "features", "processing_stages", "remote_reachable"],
+      "properties": {
+        "protocol_versions": {"type": "array", "items": {"type": "string"}},
+        "rpc_programs": {"type": "array", "items": {"type": "string"}},
+        "procedures": {"type": "array", "items": {"type": "string"}},
+        "operations": {"type": "array", "items": {"type": "string"}},
+        "features": {"type": "array", "items": {"type": "string"}},
+        "processing_stages": {"type": "array", "items": {"type": "string"}},
+        "remote_reachable": {"type": ["boolean", "null"]}
+      }
+    },
+    "target_code": {
+      "type": "object",
+      "required": ["components", "remote_entrypoints", "functions", "files", "call_paths"],
+      "properties": {
+        "components": {"type": "array", "items": {"type": "string"}},
+        "remote_entrypoints": {"type": "array", "items": {"type": "string"}},
+        "functions": {"type": "array", "items": {"type": "string"}},
+        "files": {"type": "array", "items": {"type": "string"}},
+        "call_paths": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}
+      },
+      "additionalProperties": false
+    },
+    "transferred_invariant": {"type": ["string", "null"]},
+    "required_config": {"type": "array", "items": {"type": "string"}},
+    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"enum": ["high", "medium", "low", "insufficient"]}
+  }
+}

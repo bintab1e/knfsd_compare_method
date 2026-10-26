@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "knfsd-compare-method"
+version = "0.1.0"
+description = "Evidence-driven comparative vulnerability analysis for Linux KNFSD"
+requires-python = ">=3.12"
+dependencies = [
+  "jsonschema>=4.23,<5",
+  "openpyxl==3.1.5",
+  "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+]
+
+[project.scripts]
+compare-ingest = "compare_method.ingest:main"
+compare-codex-job = "compare_method.codex_job:main"
+compare-validate = "compare_method.validate_repo:main"
+compare-runtime-status = "compare_method.runtime_harness:main"
+compare-context-pack = "compare_method.context_pack:main"
+compare-normalize-codeql = "compare_method.candidate:main"
+compare-promote-runtime-image = "compare_method.runtime_image:main"
+compare-runtime-probe = "compare_method.runtime_probe:main"
+compare-build-adjudication-bundles = "compare_method.adjudication_bundle:main"
+compare-round-result = "compare_method.round_result:main"
+compare-split-dataset = "compare_method.dataset_split:main"
+compare-codeql-artifact = "compare_method.codeql_artifact:main"
+compare-promotion = "compare_method.promotion:main"
+compare-pipeline = "compare_method.pipeline:main"
+compare-runtime-dispatch = "compare_method.runtime_dispatch:main"
+compare-round-pipeline = "compare_method.round_pipeline:main"
+compare-fetch-evidence = "compare_method.evidence_fetch:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

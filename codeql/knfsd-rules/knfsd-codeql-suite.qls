@@ -1,0 +1,2 @@
+- description: KNFSd v7.3 counted-data bounds candidate queries
+- query: MissingCountedDataGuardPairV2.ql

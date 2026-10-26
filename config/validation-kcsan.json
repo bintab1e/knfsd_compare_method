@@ -1,0 +1,6 @@
+{
+  "requested_sanitizer": "kcsan",
+  "max_runs": 100,
+  "effective_run_definition": "one concurrent remote request execution counted only when target-reached evidence is recorded",
+  "purpose": "detect concurrency faults on the candidate path; no signal after 100 effective runs is not a false-positive verdict"
+}

@@ -1,0 +1,39 @@
+schema_version: "1.0.0"
+protocol_versions:
+  - nfs2
+  - nfs3
+  - nfs4.0
+  - nfs4.1
+  - nfs4.2
+rpc_programs:
+  - nfs
+  - nlm
+  - nfs_acl
+  - nfs_callback
+components:
+  - nfsd
+  - sunrpc
+  - lockd
+  - nfs
+  - nfs_common
+processing_stages:
+  - transport
+  - authentication
+  - decode
+  - dispatch
+  - operation
+  - state_management
+  - filesystem_access
+  - encode
+  - callback
+  - async_work
+aliases:
+  NFSv2: nfs2
+  NFS v2: nfs2
+  NFSv3: nfs3
+  NFS v3: nfs3
+  NFSv4.0: nfs4.0
+  NFSv4.1: nfs4.1
+  NFSv4.2: nfs4.2
+  "4.1": nfs4.1
+  "4.2": nfs4.2

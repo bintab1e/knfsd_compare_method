@@ -1,0 +1,18 @@
+schema_version: "1.0.0"
+sources:
+  - implementation: FREEBSD
+    filename: 1Day-CVE-listup-freebsd-nfsd-2017-2026.xlsx
+  - implementation: GANESHA
+    filename: 1Day-CVE-listup-ganesha-2017-2026.xlsx
+  - implementation: ILLUMOS
+    filename: 1Day-CVE-listup-illumos-nfs-solaris-2017-2026.xlsx
+  - implementation: KNFSD
+    filename: 1Day-CVE-listup-knfsd-2017-2026.xlsx
+  - implementation: LIBNFS
+    filename: 1Day-CVE-listup-libnfs-2017-2026.xlsx
+  - implementation: NETBSD
+    filename: 1Day-CVE-listup-netbsd-nfsd-2017-2026.xlsx
+  - implementation: NFS4J
+    filename: 1Day-CVE-listup-nfs4j-2017-2026.xlsx
+  - implementation: WINDOWS
+    filename: 1Day-CVE-listup-windows-server-for-nfs-2017-2026.xlsx

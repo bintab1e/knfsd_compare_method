@@ -1,0 +1,6 @@
+{
+  "requested_sanitizer": "kasan",
+  "max_runs": 1,
+  "effective_run_definition": "one remote request execution with target-reached evidence",
+  "purpose": "detect memory-safety faults on the candidate path"
+}

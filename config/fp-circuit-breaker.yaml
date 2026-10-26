@@ -1,0 +1,21 @@
+minimum_adjudicated_samples: 30
+candidate_flood_limit: null
+no_improvement_rounds_before_quarantine: 2
+states:
+  - active
+  - throttled
+  - refinement_required
+  - quarantined
+  - retired
+never_count_as_false_positive:
+  - inconclusive
+  - unreached
+  - harness_gap
+  - no_signal
+  - no_signal_after_100
+  - insufficient_runs
+protect_if:
+  - preserves_unique_known_tp
+  - detects_validation_case
+  - detects_unique_procedure
+  - continues_to_find_new_confirmed_tp

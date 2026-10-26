@@ -1,0 +1,13 @@
+unit: root_cause_group
+seed: 730015
+development: 0.70
+validation: 0.15
+sealed_holdout: 0.15
+stratify_by:
+  - protocol_version
+  - root_cause
+  - publication_year
+cross_implementation:
+  expose_external_analogues: true
+  hide_corresponding_knfsd_cases: true
+sealed_holdout_feedback_allowed: false

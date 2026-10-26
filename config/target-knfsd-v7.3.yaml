@@ -1,0 +1,30 @@
+target_id: linux-knfsd-v7.3
+kernel_ref: v7.3
+resolved_commit: null
+codeql_database_scope: entire_linux_kernel
+components:
+  - fs/nfsd
+  - net/sunrpc
+  - fs/lockd
+  - fs/nfs
+  - fs/nfs_common
+protocol_scope:
+  included:
+    - nfs3
+    - nfs4.0
+    - nfs4.1
+    - nfs4.2
+  excluded:
+    - nfs2
+  exclusion_reason: NFSv2 is outside this analysis campaign.
+request_phases: all
+entrypoint_policy: remote_nfs_rpc_only
+feature_policy: all_relevant_knfsd_options_enabled
+follow_shared_kernel_code: true
+runtime:
+  source_of_truth: knfsd-syzkaller
+  static_target: vanilla_v7.3
+  validation_target: v7.3_with_remote_kcov_instrumentation
+  sanitizer_variants:
+    - kasan
+    - kcsan

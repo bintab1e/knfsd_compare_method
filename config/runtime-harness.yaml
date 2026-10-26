@@ -1,0 +1,63 @@
+schema_version: "1.0.0"
+repository:
+  owner: Tobabz
+  name: knfsd-syzkaller
+  url: https://github.com/Tobabz/knfsd-syzkaller.git
+  local_path: external/knfsd-syzkaller
+  branch_observed: main
+  pinned_commit: 1000ed686ed639617d568cfe4111f80ba2ad7e89
+kernel:
+  required_ref: v7.3
+  bundle_known_base_ref: v7.3
+  bundle_known_base_commit: c03c1a14507dfaf8b856c2608f9ac216021fc222
+  base_overlay: patches/knfsd-syzkaller-v7.3-base.patch
+  bootstrap_override:
+    - --kernel-ref
+    - v7.3
+  acceptance:
+    require_exact_ref_in_manifest: true
+    require_resolved_commit_in_manifest: true
+    require_boot_verification_pass: true
+environment:
+  root: runtime/knfsd-v7.3
+  manifest: runtime/knfsd-v7.3/manifest.json
+  bootstrap: external/knfsd-syzkaller/tools/bootstrap-kcov-env.py
+  base_image: external/knfsd-syzkaller/artifacts/bookworm-base.img
+  ssh_key: external/knfsd-syzkaller/artifacts/bookworm.id_rsa
+  guest_dependencies: external/knfsd-syzkaller/bundle/src/guest-deps-lane.tar.gz
+  common_arguments:
+    - --version
+    - "4.2"
+    - --kernel-ref
+    - v7.3
+    - --variant
+    - kasan
+    - --variant
+    - kcsan
+profiles:
+  kasan:
+    kernel_config: external/knfsd-syzkaller/bundle/patches/kernel.config
+    bzimage: runtime/knfsd-v7.3/images/kasan/bzImage
+    vmlinux: runtime/knfsd-v7.3/images/kasan/vmlinux
+    required_symbols:
+      CONFIG_KASAN: y
+      CONFIG_KCOV: y
+  kcsan:
+    kernel_config: external/knfsd-syzkaller/bundle/patches/kernel-kcsan.config
+    bzimage: runtime/knfsd-v7.3/images/kcsan/bzImage
+    vmlinux: runtime/knfsd-v7.3/images/kcsan/vmlinux
+    required_symbols:
+      CONFIG_KCSAN: y
+      CONFIG_KCOV: y
+    effective_target_reached_run_limit: 100
+fixture:
+  name: broad-knfsd
+  remote_cover: true
+  procs: 4
+  program_snapshot: false
+  supported_versions_observed:
+    - "3"
+    - "4.0"
+    - "4.1"
+    - "4.2"
+capability_gaps: []

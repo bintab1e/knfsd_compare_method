@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Per-pattern immutable round result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pattern_id", "round", "pattern_ir_version", "rule_versions", "results", "rule_variant_results", "coverage_changes", "refinement_status"],
+  "properties": {
+    "pattern_id": {"type": "string"},
+    "round": {"type": "integer", "minimum": 1},
+    "pattern_ir_version": {"type": "integer", "minimum": 1},
+    "rule_versions": {"type": "array", "items": {"type": "object"}},
+    "results": {
+      "type": "object",
+      "required": ["total_candidates", "confirmed_tp", "confirmed_fp", "inconclusive", "unreached", "harness_gap", "no_signal"],
+      "properties": {
+        "total_candidates": {"type": "integer", "minimum": 0},
+        "confirmed_tp": {"type": "integer", "minimum": 0},
+        "confirmed_fp": {"type": "integer", "minimum": 0},
+        "inconclusive": {"type": "integer", "minimum": 0},
+        "unreached": {"type": "integer", "minimum": 0},
+        "harness_gap": {"type": "integer", "minimum": 0},
+        "no_signal": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "rule_variant_results": {"type": "array", "items": {"type": "object"}},
+    "coverage_changes": {"type": "array", "items": {"type": "string"}},
+    "refinement_status": {"enum": ["not_required", "required", "proposed", "promoted", "rejected", "quarantined"]}
+  }
+}

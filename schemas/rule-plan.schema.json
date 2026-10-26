@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pattern-to-CodeQL rule plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pattern_id", "pattern_ir_version", "rule_plan_version", "codeql_support", "sources", "sinks", "flow_steps", "required_guards", "barriers", "scope_constraints", "rule_variants"],
+  "properties": {
+    "pattern_id": {"type": "string"},
+    "pattern_ir_version": {"type": "integer", "minimum": 1},
+    "rule_plan_version": {"type": "integer", "minimum": 1},
+    "codeql_support": {"enum": ["direct", "approximate", "candidate_only", "unsupported"]},
+    "sources": {"type": "array", "items": {"type": "string"}},
+    "sinks": {"type": "array", "items": {"type": "string"}},
+    "flow_steps": {"type": "array", "items": {"type": "string"}},
+    "required_guards": {"type": "array", "items": {"type": "string"}},
+    "barriers": {"type": "array", "items": {"type": "string"}},
+    "scope_constraints": {"type": "array", "items": {"type": "string"}},
+    "rule_variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "tier", "protocol_scope", "processing_stage"],
+        "properties": {
+          "rule_id": {"type": "string"},
+          "tier": {"enum": ["strict", "broad", "experimental"]},
+          "protocol_scope": {"type": "array", "items": {"type": "string"}},
+          "processing_stage": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

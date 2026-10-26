@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Independent KNFSd mapping review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["review_id", "mapping_id", "case_id", "target", "review_status", "applicability_status", "confidence", "verified_target_semantics", "verified_target_code", "transferred_invariant", "required_config", "evidence_refs", "rejected_claims", "reason"],
+  "properties": {
+    "review_id": {"type": "string", "pattern": "^MAPREVIEW-"},
+    "mapping_id": {"type": "string"},
+    "case_id": {"type": "string"},
+    "target": {"const": "linux-knfsd-v7.3"},
+    "review_status": {"enum": ["accepted", "needs_revision", "rejected", "insufficient_evidence"]},
+    "applicability_status": {"enum": ["direct", "semantic", "conditional", "not_applicable", "insufficient_evidence", "invalid_target"]},
+    "confidence": {"enum": ["high", "medium", "low", "insufficient"]},
+    "verified_target_semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_versions", "rpc_programs", "procedures", "operations", "features", "processing_stages", "remote_reachable"],
+      "properties": {
+        "protocol_versions": {"type": "array", "items": {"type": "string"}},
+        "rpc_programs": {"type": "array", "items": {"type": "string"}},
+        "procedures": {"type": "array", "items": {"type": "string"}},
+        "operations": {"type": "array", "items": {"type": "string"}},
+        "features": {"type": "array", "items": {"type": "string"}},
+        "processing_stages": {"type": "array", "items": {"type": "string"}},
+        "remote_reachable": {"type": ["boolean", "null"]}
+      }
+    },
+    "verified_target_code": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["components", "remote_entrypoints", "functions", "files", "call_paths"],
+      "properties": {
+        "components": {"type": "array", "items": {"type": "string"}},
+        "remote_entrypoints": {"type": "array", "items": {"type": "string"}},
+        "functions": {"type": "array", "items": {"type": "string"}},
+        "files": {"type": "array", "items": {"type": "string"}},
+        "call_paths": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}
+      }
+    },
+    "transferred_invariant": {"type": ["string", "null"]},
+    "required_config": {"type": "array", "items": {"type": "string"}},
+    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    "rejected_claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "reason", "evidence_refs"],
+        "properties": {
+          "claim": {"type": "string"},
+          "reason": {"type": "string"},
+          "evidence_refs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "reason": {"type": "string", "minLength": 1}
+  }
+}

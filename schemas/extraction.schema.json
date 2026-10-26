@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence-backed case extraction",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "extraction_version", "nfs_semantics", "vulnerability_model", "fix_model", "claims", "confidence", "status"],
+  "properties": {
+    "case_id": {"type": "string"},
+    "extraction_version": {"type": "integer", "minimum": 1},
+    "nfs_semantics": {
+      "type": "object",
+      "required": ["versions", "rpc_programs", "procedures", "operations", "features", "processing_stages"],
+      "properties": {
+        "versions": {"type": "array", "items": {"type": "string"}},
+        "rpc_programs": {"type": "array", "items": {"type": "string"}},
+        "procedures": {"type": "array", "items": {"type": "string"}},
+        "operations": {"type": "array", "items": {"type": "string"}},
+        "features": {"type": "array", "items": {"type": "string"}},
+        "processing_stages": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "vulnerability_model": {
+      "type": "object",
+      "required": ["attacker_controlled_inputs", "preconditions", "sources", "propagation", "dangerous_operations", "missing_guards", "root_cause", "violated_invariants", "security_impacts"],
+      "properties": {
+        "attacker_controlled_inputs": {"type": "array", "items": {"type": "string"}},
+        "preconditions": {"type": "array", "items": {"type": "string"}},
+        "sources": {"type": "array", "items": {"type": "string"}},
+        "propagation": {"type": "array", "items": {"type": "string"}},
+        "dangerous_operations": {"type": "array", "items": {"type": "string"}},
+        "missing_guards": {"type": "array", "items": {"type": "string"}},
+        "root_cause": {"type": ["string", "null"]},
+        "violated_invariants": {"type": "array", "items": {"type": "string"}},
+        "security_impacts": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "fix_model": {
+      "type": "object",
+      "required": ["added_guards", "changed_data_flow", "restored_invariants"],
+      "properties": {
+        "added_guards": {"type": "array", "items": {"type": "string"}},
+        "changed_data_flow": {"type": "array", "items": {"type": "string"}},
+        "restored_invariants": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "evidence_refs"],
+        "properties": {
+          "claim": {"type": "string", "minLength": 1},
+          "evidence_refs": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        }
+      }
+    },
+    "confidence": {"enum": ["high", "medium", "low", "insufficient"]},
+    "status": {"enum": ["proposed", "accepted", "needs_revision", "insufficient_evidence", "rejected"]}
+  }
+}

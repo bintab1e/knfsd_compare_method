@@ -1,0 +1,4 @@
+interface:
+  display_name: "KNFSD Vulnerability Pipeline"
+  short_description: "Run the evidence-driven KNFSD comparative-analysis pipeline"
+  default_prompt: "Use the KNFSD vulnerability pipeline to execute the requested stage and preserve its audit trail."

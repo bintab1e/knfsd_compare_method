@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rule version promotion and circuit-breaker decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pattern_id", "baseline_version", "candidate_version", "milestone_holdout_evaluation", "gates", "metrics", "circuit_breaker", "decision", "reasons", "input_hashes"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "pattern_id": {"type": "string", "pattern": "^PATTERN-"},
+    "baseline_version": {"type": "integer", "minimum": 1},
+    "candidate_version": {"type": "integer", "minimum": 1},
+    "milestone_holdout_evaluation": {"type": "boolean"},
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete_evidence", "preserves_existing_confirmed_tp", "new_tp_or_fewer_confirmed_fp", "validation_does_not_regress", "candidate_volume_acceptable", "runtime_acceptable", "sealed_holdout_passed"],
+      "properties": {
+        "complete_evidence": {"type": "boolean"},
+        "preserves_existing_confirmed_tp": {"type": "boolean"},
+        "new_tp_or_fewer_confirmed_fp": {"type": "boolean"},
+        "validation_does_not_regress": {"type": "boolean"},
+        "candidate_volume_acceptable": {"type": "boolean"},
+        "runtime_acceptable": {"type": "boolean"},
+        "sealed_holdout_passed": {"type": ["boolean", "null"]}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline", "candidate", "candidate_growth", "runtime_growth", "adjudicated_samples"],
+      "properties": {
+        "baseline": {"$ref": "#/$defs/summary"},
+        "candidate": {"$ref": "#/$defs/summary"},
+        "candidate_growth": {"type": ["number", "null"]},
+        "runtime_growth": {"type": ["number", "null"]},
+        "adjudicated_samples": {"type": "integer", "minimum": 0}
+      }
+    },
+    "circuit_breaker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "candidate_limit", "minimum_adjudicated_samples_met", "protected", "no_improvement_rounds"],
+      "properties": {
+        "state": {"enum": ["active", "throttled", "refinement_required", "quarantined", "retired"]},
+        "candidate_limit": {"type": "integer", "minimum": 1},
+        "minimum_adjudicated_samples_met": {"type": "boolean"},
+        "protected": {"type": "boolean"},
+        "no_improvement_rounds": {"type": "integer", "minimum": 0}
+      }
+    },
+    "decision": {"enum": ["promote", "keep_baseline", "refine", "quarantine", "throttle", "insufficient_evidence"]},
+    "reasons": {"type": "array", "items": {"type": "string"}},
+    "input_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline", "candidate", "promotion_policy", "circuit_breaker_policy"],
+      "properties": {
+        "baseline": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "candidate": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "promotion_policy": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "circuit_breaker_policy": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  },
+  "$defs": {
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_count", "runtime_seconds", "confirmed_tp", "confirmed_fp", "validation_known_positive_detected", "validation_known_positive_total", "holdout_known_positive_detected", "holdout_known_positive_total"],
+      "properties": {
+        "candidate_count": {"type": "integer", "minimum": 0},
+        "runtime_seconds": {"type": "number", "minimum": 0},
+        "confirmed_tp": {"type": "integer", "minimum": 0},
+        "confirmed_fp": {"type": "integer", "minimum": 0},
+        "validation_known_positive_detected": {"type": "integer", "minimum": 0},
+        "validation_known_positive_total": {"type": "integer", "minimum": 0},
+        "holdout_known_positive_detected": {"type": "integer", "minimum": 0},
+        "holdout_known_positive_total": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

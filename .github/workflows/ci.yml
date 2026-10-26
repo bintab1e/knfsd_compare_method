@@ -1,0 +1,48 @@
+name: compare-method-ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts-and-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m compileall -q src tests
+      - run: pytest -q
+      - run: compare-validate --repo "$GITHUB_WORKSPACE"
+
+  codeql-pack:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install 'PyYAML>=6.0,<7'
+      - name: Install pinned CodeQL CLI
+        run: |
+          set -euo pipefail
+          url="$(python -c 'import yaml; print(yaml.safe_load(open("config/codeql.yaml"))["bundle"]["url"])')"
+          expected="$(python -c 'import yaml; print(yaml.safe_load(open("config/codeql.yaml"))["bundle"]["sha256"])')"
+          curl --fail --location --retry 3 "$url" --output /tmp/codeql.zip
+          echo "$expected  /tmp/codeql.zip" | sha256sum --check -
+          unzip -q /tmp/codeql.zip -d /tmp/codeql
+          echo "/tmp/codeql/codeql" >> "$GITHUB_PATH"
+      - name: Compile tracked KNFSD queries
+        run: |
+          set -euo pipefail
+          codeql pack install codeql/knfsd-rules
+          find codeql/knfsd-rules -maxdepth 1 -name '*.ql' -type f -print0 \
+            | sort -z \
+            | xargs -0 -n1 codeql query compile
+          codeql test run codeql/knfsd-rules/tests

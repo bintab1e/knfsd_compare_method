@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Candidate adjudication verdict",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate_id", "pattern_verdict", "bug_verdict", "security_verdict", "final_label", "evidence_refs", "reason"],
+  "properties": {
+    "candidate_id": {"type": "string"},
+    "pattern_verdict": {
+      "type": "object",
+      "required": ["matches_intended_pattern", "confidence"],
+      "properties": {
+        "matches_intended_pattern": {"type": ["boolean", "null"]},
+        "confidence": {"enum": ["high", "medium", "low", "insufficient"]}
+      },
+      "additionalProperties": false
+    },
+    "bug_verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["is_real_bug", "sanitizer_signal", "reproducible", "confidence"],
+      "properties": {
+        "is_real_bug": {"type": ["boolean", "null"]},
+        "sanitizer_signal": {"type": ["string", "null"]},
+        "reproducible": {"type": ["boolean", "null"]},
+        "confidence": {"enum": ["high", "medium", "low", "insufficient"]}
+      }
+    },
+    "security_verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["remote_triggerable", "impacts", "preconditions", "confidence"],
+      "properties": {
+        "remote_triggerable": {"type": ["boolean", "null"]},
+        "impacts": {"type": "array", "items": {"type": "string"}},
+        "preconditions": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"enum": ["high", "medium", "low", "insufficient"]}
+      }
+    },
+    "final_label": {"enum": ["confirmed_tp", "confirmed_fp", "inconclusive", "unreached", "harness_gap", "no_signal", "no_signal_after_100", "insufficient_runs", "duplicate"]},
+    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    "reason": {"type": "string", "minLength": 1}
+  }
+}

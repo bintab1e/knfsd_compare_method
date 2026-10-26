@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Materializable KNFSD CodeQL artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pattern_id", "pattern_ir_version", "rule_plan_version", "artifact_version", "status", "pack", "queries", "tests", "controls", "review_notes"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "pattern_id": {"type": "string", "pattern": "^PATTERN-[A-Z0-9-]+$"},
+    "pattern_ir_version": {"type": "integer", "minimum": 1},
+    "rule_plan_version": {"type": "integer", "minimum": 1},
+    "artifact_version": {"type": "integer", "minimum": 1},
+    "status": {"enum": ["proposed", "accepted", "needs_revision", "rejected"]},
+    "pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "dependencies"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z0-9_.-]+/[a-z0-9_.-]+$"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "dependencies": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["codeql/cpp-all"],
+          "properties": {"codeql/cpp-all": {"type": "string"}}
+        }
+      }
+    },
+    "queries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "rule_id", "tier", "query_kind", "content"],
+        "properties": {
+          "path": {"type": "string", "pattern": "^[A-Za-z0-9_./-]+\\.ql$"},
+          "rule_id": {"type": "string", "minLength": 1},
+          "tier": {"enum": ["strict", "broad", "experimental"]},
+          "query_kind": {"enum": ["problem", "path-problem"]},
+          "content": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "content"],
+        "properties": {
+          "path": {"type": "string", "pattern": "^tests/[A-Za-z0-9_./-]+\\.(?:ql|qlref|cpp|c|h|expected)$"},
+          "content": {"type": "string"}
+        }
+      }
+    },
+    "controls": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["control_id", "expectation", "description", "test_paths"],
+        "properties": {
+          "control_id": {"type": "string", "minLength": 1},
+          "expectation": {"enum": ["hit", "no_hit"]},
+          "description": {"type": "string", "minLength": 1},
+          "test_paths": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        }
+      }
+    },
+    "review_notes": {"type": "array", "items": {"type": "string"}}
+  }
+}

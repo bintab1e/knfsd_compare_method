@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Normalized CodeQL candidate",
+  "type": "object",
+  "required": ["candidate_id", "campaign_id", "pattern_id", "fingerprint", "detections", "status"],
+  "properties": {
+    "candidate_id": {"type": "string", "pattern": "^CANDIDATE-"},
+    "campaign_id": {"type": "string", "pattern": "^CAMPAIGN-"},
+    "pattern_id": {"type": "string"},
+    "fingerprint": {"type": "string"},
+    "detections": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "status": {"enum": ["new", "reachability_planned", "validation_queued", "adjudicated", "duplicate"]}
+  },
+  "additionalProperties": true
+}

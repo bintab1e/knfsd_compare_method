@@ -1,0 +1,8 @@
+requirements:
+  preserve_existing_confirmed_tp: true
+  require_new_tp_or_fewer_confirmed_fp: true
+  reject_candidate_flood: true
+  reject_excessive_runtime: true
+validation_must_not_regress: true
+sealed_holdout_usage: milestone_only
+max_runtime_growth: 2.0

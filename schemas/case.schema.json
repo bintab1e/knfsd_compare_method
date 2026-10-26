@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tobabz.local/schemas/case.schema.json",
+  "title": "NFS 1-day canonical case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_id",
+    "case_group_id",
+    "root_cause_index",
+    "source_implementation",
+    "identifier",
+    "facts",
+    "references",
+    "source_records",
+    "field_status",
+    "workflow",
+    "source_fingerprint_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "case_id": {"type": "string", "pattern": "^CASE-[A-Z0-9]+-(CVE-[0-9]{4}-[0-9]{4,7}|COMMIT-[A-F0-9]{7,64}|UNRESOLVED-[A-F0-9]{12})-RC[0-9]{2}$"},
+    "case_group_id": {"type": "string", "pattern": "^GROUP-"},
+    "root_cause_index": {"type": "integer", "minimum": 1},
+    "source_implementation": {"enum": ["FREEBSD", "GANESHA", "ILLUMOS", "KNFSD", "LIBNFS", "NETBSD", "NFS4J", "WINDOWS"]},
+    "identifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "cve_id", "commit_sha", "aliases"],
+      "properties": {
+        "type": {"enum": ["cve", "commit", "unresolved"]},
+        "cve_id": {"type": ["string", "null"], "pattern": "^CVE-[0-9]{4}-[0-9]{4,7}$"},
+        "commit_sha": {"type": ["string", "null"], "pattern": "^[a-f0-9]{7,64}$"},
+        "aliases": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "target_implementations", "protocol_versions_raw", "priority", "attack_surfaces_raw", "root_cause_claims", "affected_versions_raw", "cvss_raw", "published_or_commit_dates"],
+      "properties": {
+        "title": {"type": ["string", "null"]},
+        "target_implementations": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "protocol_versions_raw": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "priority": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["raw", "normalized"],
+          "properties": {
+            "raw": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "normalized": {"type": "array", "items": {"enum": ["very_high", "high", "conditional_high", "medium", "low", "review_required", "unassigned", "unmapped"]}, "uniqueItems": true}
+          }
+        },
+        "attack_surfaces_raw": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "root_cause_claims": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "affected_versions_raw": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "cvss_raw": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "published_or_commit_dates": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "display", "url", "source_record_id", "source_cell"],
+        "properties": {
+          "kind": {"enum": ["reference", "patch_or_related"]},
+          "display": {"type": ["string", "null"]},
+          "url": {"type": ["string", "null"]},
+          "source_record_id": {"type": "string"},
+          "source_cell": {"type": "string"}
+        }
+      }
+    },
+    "source_records": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["record_id", "workbook", "workbook_sha256", "sheet", "excel_row", "source_number", "raw_fields", "source_cells"],
+        "properties": {
+          "record_id": {"type": "string"},
+          "workbook": {"type": "string"},
+          "workbook_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "sheet": {"type": "string"},
+          "excel_row": {"type": "integer", "minimum": 2},
+          "source_number": {},
+          "raw_fields": {"type": "object"},
+          "source_cells": {"type": "object"}
+        }
+      }
+    },
+    "field_status": {"type": "object", "additionalProperties": {"enum": ["known", "unknown", "not_public", "not_applicable", "conflicting", "needs_review"]}},
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root_cause_split_status", "extraction_status", "knfsd_mapping_status"],
+      "properties": {
+        "root_cause_split_status": {"enum": ["single_claim", "needs_review", "split_complete"]},
+        "extraction_status": {"enum": ["not_started", "in_progress", "accepted", "needs_revision", "insufficient_evidence", "rejected"]},
+        "knfsd_mapping_status": {"enum": ["not_started", "direct", "semantic", "conditional", "not_applicable", "insufficient_evidence"]}
+      }
+    },
+    "source_fingerprint_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

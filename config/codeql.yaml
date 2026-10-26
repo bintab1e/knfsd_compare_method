@@ -1,0 +1,29 @@
+schema_version: "1.0.0"
+version: "2.27.3"
+language: cpp
+bundle:
+  url: https://github.com/github/codeql-cli-binaries/releases/download/v2.27.3/codeql-linux64.zip
+  sha256: 845075a2fa2fdf72629adc6cbde6264691b698d1f294bd27f10c6b579cd750a4
+  local_path: external/codeql-v2.27.3/codeql
+scan:
+  ram_mb: 4096
+  timeout_seconds: 900
+database:
+  path: codeql-db/linux-v7.3-vanilla-v4
+  source_root: kernel/linux-v7.3
+  build_output: runtime/codeql-build/linux-v7.3-v3
+  compiler: clang
+  traced_targets:
+    - fs/nfsd/
+    - net/sunrpc/
+    - fs/lockd/
+    - fs/nfs_common/
+  extraction_compatibility:
+    reason: CodeQL 2.27.3 cannot parse GCC x86 named-address-space per-CPU expressions in Linux v7.3
+    analysis_only_sanitizers_disabled: true
+    runtime_sanitizer_profiles_unchanged: true
+  expected_source_commit: c03c1a14507dfaf8b856c2608f9ac216021fc222
+runtime_source:
+  source_root: runtime/knfsd-v7.3/linux
+  expected_base_commit: c03c1a14507dfaf8b856c2608f9ac216021fc222
+  expected_instrumented_head: 6ba802e6a1363551b1071a058cba088bfbcb36e3

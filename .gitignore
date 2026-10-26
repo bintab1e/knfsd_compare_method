@@ -1,0 +1,42 @@
+.venv/
+.uv-venv/
+.localdeps/
+__pycache__/
+*.py[cod]
+*.actual
+*.egg-info/
+.pytest_cache/
+.pytest-tmp/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# Generated datasets and run artifacts
+# data/raw and data/cases are canonical private-repository evidence and stay tracked.
+data/generated/
+analysis/
+codeql/generated/
+target-map/generated/
+mappings/
+patterns/*/rounds/
+campaigns/
+candidates/
+validation/runs/
+runs/
+artifacts/
+external/
+runtime/
+
+# Large local build products
+codeql-db/
+kernel/
+env/
+*.qcow2
+*.img
+vmlinux
+bzImage
+
+# Secrets
+.env
+*.key
+*.pem
