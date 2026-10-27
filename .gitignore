@@ -11,21 +11,30 @@ __pycache__/
 .ruff_cache/
 .coverage
 
-# Generated datasets and run artifacts
-# data/raw and data/cases are canonical private-repository evidence and stay tracked.
+# Generated/private datasets and run artifacts. This repository is source-only.
+data/raw/
+data/cases/
 data/generated/
+data/manifest.json
+data/quality-report.json
+evidence/
 analysis/
 codeql/generated/
 target-map/generated/
+target-map/context/
 mappings/
-patterns/*/rounds/
+patterns/
 campaigns/
 candidates/
+validation/jobs/
 validation/runs/
 runs/
 artifacts/
 external/
 runtime/
+*.audit.json
+*.sarif
+*.log
 
 # Large local build products
 codeql-db/
@@ -38,5 +47,17 @@ bzImage
 
 # Secrets
 .env
+.env.*
 *.key
 *.pem
+*.p12
+*.pfx
+auth.json
+credentials.json
+.netrc
+.git-credentials
+.npmrc
+.pypirc
+id_rsa
+id_rsa.*
+.codex/

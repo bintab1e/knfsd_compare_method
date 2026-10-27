@@ -26,3 +26,28 @@ def test_job_is_ephemeral_structured_and_pinned(tmp_path, monkeypatch):
     assert "--ignore-user-config" in command
     assert "model_reasoning_effort=xhigh" in command
     assert "Untrusted evidence boundary" in job["prompt"]
+
+
+def test_job_allows_explicit_per_role_reasoning_effort(tmp_path):
+    repo = tmp_path
+    (repo / "config").mkdir()
+    (repo / "prompts").mkdir()
+    (repo / "schemas").mkdir()
+    (repo / "config" / "llm.yaml").write_text(
+        "model: gpt-5.6-sol\n"
+        "reasoning_effort: xhigh\n"
+        "role_reasoning_effort:\n"
+        "  codeql-fast-author: high\n"
+        "sandbox: read-only\n"
+        "executable: codex\n",
+        encoding="utf-8",
+    )
+    (repo / "prompts" / "codeql-fast-author.md").write_text("fast", encoding="utf-8")
+    (repo / "schemas" / "fast-codeql-bundle.schema.json").write_text(
+        json.dumps({"type": "object"}), encoding="utf-8"
+    )
+    evidence = repo / "pattern.json"
+    evidence.write_text("{}", encoding="utf-8")
+    job = build_job("codeql-fast-author", repo, [evidence], repo / "out.json")
+    assert job["reasoning_effort"] == "high"
+    assert "model_reasoning_effort=high" in job["command"]

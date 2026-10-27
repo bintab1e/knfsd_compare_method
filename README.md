@@ -8,7 +8,8 @@ The repository is intentionally evidence-first:
 - LLM extraction, KNFSD mapping, Pattern IR, verdicts, and round results are versioned separately.
 - Only cases with a supported remote KNFSD mapping enter Pattern IR and CodeQL generation.
 - Missing KASAN/KCSAN output is not a false positive.
-- Every LLM role runs as a fresh headless `codex exec` job using `gpt-5.6-sol` with `xhigh` reasoning and JSON Schema output.
+- Every LLM role runs as a fresh headless `codex exec` job using `gpt-5.6-sol` and JSON Schema output. The fast Round-0 author uses explicit `high` effort; adjudication, refinement, and legacy deep-review roles retain `xhigh`.
+- GitHub contains source and reusable tests only. Evidence, private splits, generated rules, audits, SARIF, candidates, verdicts, and runtime output stay untracked. Before a push, `python scripts/prepush_audit.py` checks every tracked or non-ignored file and Git remote for forbidden output paths, credential filenames, embedded credentials, and common API-token formats without printing suspected secret values.
 
 ## Bootstrap
 
@@ -72,7 +73,17 @@ Run a stage in bounded, resumable batches. Fact-only extraction is blocked by de
   --stage extraction --partition development --max-jobs 10
 ```
 
-The available upstream stages are `extraction`, `extraction-review`, `mapping`, `context`, `mapping-review`, `pattern`, `pattern-review`, `rule-plan`, `codeql-author`, `codeql-review`, and `codeql-materialize`. Every LLM call goes through `compare-codex-job`, uses a fresh ephemeral `gpt-5.6-sol`/`xhigh` Daybreak Blue session, validates structured output, and records input/prompt/schema hashes.
+The default fast path is `pattern`, `codeql-fast-author`, and `codeql-fast-gate`. The fast author emits the plan, query, and qltests together; the gate compiles and tests deterministically. Only failures enter bounded `codeql-author` repair. Legacy `pattern-review`, `rule-plan`, and `codeql-review` remain available for explicit escalation. Every LLM call goes through `compare-codex-job`, uses a fresh ephemeral Daybreak Blue session, validates structured output, and records input/prompt/schema hashes.
+
+Run the complete resumable fast path with:
+
+```bash
+.venv/bin/compare-campaign-driver --repo . \
+  --campaign-id CAMPAIGN-KNFSD-V73-001 \
+  --workers 8 --pattern-workers 4 --max-repair-rounds 3 --round 1
+```
+
+Accepted queries are scanned in one CodeQL invocation and then split back into independent per-pattern SARIF and candidate directories.
 
 ## Pattern rounds
 
@@ -110,8 +121,8 @@ The initial Ganesha CVE-2017-8779 transfer pattern has already traversed extract
 1. Import eight workbooks as immutable source evidence and canonical fact-only cases.
 2. Extract and independently review each case's causal model.
 3. Map supported remote NFS/RPC semantics to vanilla KNFSd `v7.3`; exclude non-applicable cases from active analysis without deleting them.
-4. Build and independently review versioned Pattern IR.
-5. Generate and test KNFSd-specific CodeQL rule variants, then scan the full kernel database.
+4. Build versioned Pattern IR; reserve independent Pattern IR review for exceptions.
+5. Generate each rule plan, query, and qltests together; deterministically gate them, repair only failures, and batch-scan the full kernel database once.
 6. Prove candidate remote reachability and validate KASAN/KCSAN jobs in the knfsd-syzkaller-compatible QEMU environment.
 7. Adjudicate intended-pattern match, bug reality, and security relevance separately.
 8. Close each pattern's round, apply the false-positive circuit breaker, and refine without sealed-holdout feedback.

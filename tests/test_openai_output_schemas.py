@@ -14,6 +14,7 @@ OUTPUT_SCHEMAS = [
     "validation-job.v2.schema.json",
     "verdict.schema.json",
     "codeql-artifact.schema.json",
+    "fast-codeql-bundle.schema.json",
 ]
 
 

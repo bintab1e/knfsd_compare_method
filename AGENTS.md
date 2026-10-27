@@ -9,3 +9,5 @@
 - Target NFSv3, v4.0, v4.1, and v4.2 only. NFSv2 source cases remain preserved but must not enter active KNFSd mappings, rules, or runtime jobs.
 - Run headless LLM roles through `compare-codex-job`; do not silently change the configured model or reasoning effort.
 - Do not commit CodeQL databases, kernel builds, VM images, credentials, or large raw logs.
+- Keep the GitHub repository source-only: never commit raw evidence, case data, private split manifests, audit logs, SARIF, candidates, verdicts, runtime output, or generated rule artifacts.
+- Before every push, inspect the exact tracked diff and scan tracked files for credentials, API keys, bearer tokens, private keys, and credential-bearing remote URLs.

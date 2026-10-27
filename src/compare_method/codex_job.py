@@ -23,6 +23,7 @@ ROLE_SCHEMAS = {
     "pattern-reviewer": "pattern-ir.schema.json",
     "rule-planner": "rule-plan.schema.json",
     "codeql-author": "codeql-artifact.schema.json",
+    "codeql-fast-author": "fast-codeql-bundle.schema.json",
     "codeql-reviewer": "codeql-artifact.schema.json",
     "reachability-planner": "validation-job.v2.schema.json",
     "adjudicator": "verdict.schema.json",
@@ -64,6 +65,8 @@ def _payload(input_paths: list[Path]) -> list[dict[str, Any]]:
 
 def build_job(role: str, repo: Path, input_paths: list[Path], output: Path) -> dict[str, Any]:
     config = yaml.safe_load((repo / "config" / "llm.yaml").read_text(encoding="utf-8"))
+    role_efforts = config.get("role_reasoning_effort", {})
+    reasoning_effort = role_efforts.get(role, config["reasoning_effort"])
     prompt_path = repo / "prompts" / f"{role}.md"
     schema_path = repo / "schemas" / ROLE_SCHEMAS[role]
     prompt_template = prompt_path.read_text(encoding="utf-8")
@@ -94,7 +97,7 @@ def build_job(role: str, repo: Path, input_paths: list[Path], output: Path) -> d
         "--color",
         "never",
         "--config",
-        f"model_reasoning_effort={config['reasoning_effort']}",
+        f"model_reasoning_effort={reasoning_effort}",
         "--output-schema",
         str(schema_path),
         "--output-last-message",
@@ -103,6 +106,7 @@ def build_job(role: str, repo: Path, input_paths: list[Path], output: Path) -> d
     ])
     return {
         "config": config,
+        "reasoning_effort": reasoning_effort,
         "prompt_path": prompt_path,
         "schema_path": schema_path,
         "prompt": prompt,
@@ -128,7 +132,7 @@ def run_job(
         "role": role,
         "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "model": job["config"]["model"],
-        "reasoning_effort": job["config"]["reasoning_effort"],
+        "reasoning_effort": job["reasoning_effort"],
         "sandbox": job["config"].get("sandbox", "read-only"),
         "timeout_seconds": int(job["config"].get("timeout_seconds", 3600)),
         "fresh_ephemeral_session": True,

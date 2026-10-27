@@ -12,7 +12,7 @@ from typing import Any, Callable
 import yaml
 from jsonschema import Draft202012Validator
 
-from .codeql_artifact import materialize, verify_pack
+from .codeql_artifact import materialize, validate_artifact, verify_pack
 from .codex_job import run_job
 from .common import repo_root, sha256_file, write_json
 from .context_pack import build_context_pack
@@ -30,6 +30,8 @@ STAGES = (
     "pattern",
     "pattern-review",
     "rule-plan",
+    "codeql-fast-author",
+    "codeql-fast-gate",
     "codeql-author",
     "codeql-review",
     "codeql-materialize",
@@ -489,10 +491,226 @@ def _group_state(repo: Path, group_path: Path) -> dict[str, Any]:
         "pattern": directory / "v1.json",
         "reviewed_pattern": directory / "v1.reviewed.json",
         "rule_plan": directory / "rule-plan-v1.json",
+        "fast_bundle": directory / "fast-bundle-v1.json",
         "codeql": max(proposed)[1] if proposed else None,
         "codeql_version": max(proposed)[0] if proposed else 0,
         "reviewed_codeql": max(reviewed)[1] if reviewed else None,
         "reviewed_codeql_version": max(reviewed)[0] if reviewed else 0,
+    }
+
+
+def _pattern_input(state: dict[str, Any]) -> Path | None:
+    if state["reviewed_pattern"].is_file():
+        return state["reviewed_pattern"]
+    if state["pattern"].is_file():
+        return state["pattern"]
+    return None
+
+
+def _write_immutable_json(path: Path, value: dict[str, Any]) -> None:
+    if path.is_file():
+        if _json(path) != value:
+            raise ValueError(f"refusing to overwrite a different derived artifact: {path}")
+        return
+    write_json(path, value)
+
+
+def _derive_fast_bundle(repo: Path, state: dict[str, Any]) -> None:
+    """Split one LLM response into the existing versioned plan/artifact files."""
+    bundle_path = state["fast_bundle"]
+    bundle = _json(bundle_path)
+    plan = bundle["rule_plan"]
+    artifact = bundle["codeql_artifact"]
+    pattern_path = _pattern_input(state)
+    if pattern_path is None:
+        raise ValueError("fast bundle has no Pattern IR")
+    pattern = _json(pattern_path)
+    pattern_id = pattern["pattern_id"]
+    if plan["pattern_id"] != pattern_id or artifact["pattern_id"] != pattern_id:
+        raise ValueError("fast bundle pattern IDs do not match its Pattern IR")
+    if plan["pattern_ir_version"] != artifact["pattern_ir_version"]:
+        raise ValueError("fast bundle Pattern IR versions disagree")
+    if plan["rule_plan_version"] != artifact["rule_plan_version"]:
+        raise ValueError("fast bundle rule plan versions disagree")
+    plan_schema = _json(repo / "schemas" / "rule-plan.schema.json")
+    Draft202012Validator(plan_schema).validate(plan)
+    validate_artifact(repo, artifact, allow_proposed=True)
+    plan_rule_ids = {item["rule_id"] for item in plan["rule_variants"]}
+    query_rule_ids = {item["rule_id"] for item in artifact["queries"]}
+    if not query_rule_ids <= plan_rule_ids:
+        raise ValueError("fast bundle contains CodeQL rule IDs absent from its rule plan")
+    for query in artifact["queries"]:
+        metadata_id = re.search(r"(?m)^\s*\*?\s*@id\s+(\S+)\s*$", query["content"])
+        if metadata_id is None or metadata_id.group(1) != query["rule_id"]:
+            raise ValueError(
+                f"fast query {query['path']} must use rule_id as its CodeQL @id"
+            )
+    _write_immutable_json(state["rule_plan"], plan)
+    codeql_path = state["directory"] / "codeql-v1.json"
+    _write_immutable_json(codeql_path, artifact)
+    _write_immutable_json(
+        bundle_path.with_suffix(bundle_path.suffix + ".derived.json"),
+        {
+            "schema_version": "1.0.0",
+            "source_bundle": str(bundle_path),
+            "source_bundle_sha256": sha256_file(bundle_path),
+            "pattern_input": str(pattern_path),
+            "pattern_input_sha256": sha256_file(pattern_path),
+            "rule_plan": str(state["rule_plan"]),
+            "rule_plan_sha256": sha256_file(state["rule_plan"]),
+            "codeql_artifact": str(codeql_path),
+            "codeql_artifact_sha256": sha256_file(codeql_path),
+        },
+    )
+
+
+def _fast_gate_artifact(repo: Path, state: dict[str, Any], dry_run: bool) -> str:
+    """Accept passing initial rules without a second LLM call; retain failures for repair."""
+    artifact_path = state["codeql"]
+    if artifact_path is None:
+        return "missing"
+    output = state["directory"] / f"codeql-v{state['codeql_version']}.reviewed.json"
+    if output.is_file():
+        return _json(output)["status"]
+    if dry_run:
+        return "dry_run"
+    preflight = _codeql_preflight(repo, artifact_path)
+    verification = _json(preflight)
+    gate = verification.get("gate", {})
+    passed = gate.get("compiled") is True and gate.get("qltests_passed") is True
+    artifact = _json(artifact_path)
+    artifact["status"] = "accepted" if passed else "needs_revision"
+    artifact["review_notes"] = [
+        *artifact.get("review_notes", []),
+        (
+            "deterministic fast gate: "
+            f"compiled={bool(gate.get('compiled'))}, "
+            f"qltests_passed={bool(gate.get('qltests_passed'))}, "
+            f"verification_sha256={sha256_file(preflight)}"
+        ),
+    ]
+    validate_artifact(repo, artifact, allow_proposed=not passed)
+    _write_immutable_json(output, artifact)
+    _write_immutable_json(
+        output.with_suffix(output.suffix + ".audit.json"),
+        {
+            "schema_version": "1.0.0",
+            "role": "deterministic-fast-gate",
+            "input": {"path": str(artifact_path), "sha256": sha256_file(artifact_path)},
+            "preflight": {"path": str(preflight), "sha256": sha256_file(preflight)},
+            "decision": artifact["status"],
+        },
+    )
+    if passed:
+        pack_dir, _ = materialize(repo, output, repo / "codeql" / "generated")
+        final = verify_pack(repo, pack_dir)
+        final_gate = final["gate"]
+        if not final_gate["compiled"] or not final_gate["qltests_passed"]:
+            raise RuntimeError(f"final fast gate changed result for {artifact['pattern_id']}")
+    return artifact["status"]
+
+
+def _run_fast_author_stage(
+    repo: Path,
+    campaign: dict[str, Any],
+    groups: list[Path],
+    max_jobs: int,
+    dry_run: bool,
+    workers: int,
+) -> dict[str, Any]:
+    split_path, _ = _split(repo, campaign)
+    attempted = completed = blocked = skipped = 0
+    reasons: dict[str, int] = {}
+    jobs: list[tuple[str, list[Path], Path]] = []
+    selected_states: list[dict[str, Any]] = []
+    for group_path in groups:
+        state = _group_state(repo, group_path)
+        if state["codeql"] is not None and state["rule_plan"].is_file():
+            skipped += 1
+            continue
+        if state["fast_bundle"].is_file():
+            _derive_fast_bundle(repo, state)
+            completed += 1
+            continue
+        if attempted >= max_jobs:
+            break
+        pattern_path = _pattern_input(state)
+        contexts = [
+            repo / item["context_path"]
+            for item in state["group"]["members"]
+            if item["context_path"]
+        ]
+        if pattern_path is None:
+            blocked += 1
+            reasons["missing_pattern"] = reasons.get("missing_pattern", 0) + 1
+            continue
+        if not contexts:
+            blocked += 1
+            reasons["missing_context"] = reasons.get("missing_context", 0) + 1
+            continue
+        inputs = [
+            pattern_path,
+            *contexts,
+            repo / "config" / "target-knfsd-v7.3.yaml",
+            repo / "registry" / "nfs-semantics.yaml",
+            repo / "registry" / "vulnerability-taxonomy.yaml",
+        ]
+        jobs.append(("codeql-fast-author", inputs, state["fast_bundle"]))
+        selected_states.append(state)
+        attempted += 1
+    _run_role_batch(jobs, repo, dry_run, split_path, workers)
+    if not dry_run:
+        for state in selected_states:
+            _derive_fast_bundle(repo, state)
+            completed += 1
+    else:
+        completed += len(selected_states)
+    return {
+        "stage": "codeql-fast-author",
+        "pattern_groups": len(groups),
+        "attempted": attempted,
+        "completed": completed,
+        "blocked": blocked,
+        "skipped": skipped,
+        "blocked_reasons": reasons,
+        "dry_run": dry_run,
+        "workers": workers,
+    }
+
+
+def _run_fast_gate_stage(
+    repo: Path,
+    groups: list[Path],
+    max_jobs: int,
+    dry_run: bool,
+) -> dict[str, Any]:
+    attempted = completed = blocked = skipped = 0
+    decisions = {"accepted": 0, "needs_revision": 0, "dry_run": 0}
+    for group_path in groups:
+        state = _group_state(repo, group_path)
+        if state["codeql"] is None:
+            blocked += 1
+            continue
+        if state["reviewed_codeql_version"] >= state["codeql_version"]:
+            skipped += 1
+            continue
+        if attempted >= max_jobs:
+            break
+        attempted += 1
+        decision = _fast_gate_artifact(repo, state, dry_run)
+        if decision in decisions:
+            decisions[decision] += 1
+        completed += 1
+    return {
+        "stage": "codeql-fast-gate",
+        "pattern_groups": len(groups),
+        "attempted": attempted,
+        "completed": completed,
+        "blocked": blocked,
+        "skipped": skipped,
+        "decisions": decisions,
+        "dry_run": dry_run,
+        "workers": 1,
     }
 
 
@@ -502,11 +720,17 @@ def run_pattern_stage(
     stage: str,
     max_jobs: int,
     dry_run: bool,
+    workers: int = 1,
 ) -> dict[str, Any]:
     split_path, _ = _split(repo, campaign)
     groups = build_pattern_groups(repo, campaign)
+    if stage == "codeql-fast-author":
+        return _run_fast_author_stage(repo, campaign, groups, max_jobs, dry_run, workers)
+    if stage == "codeql-fast-gate":
+        return _run_fast_gate_stage(repo, groups, max_jobs, dry_run)
     attempted = completed = blocked = skipped = 0
     reasons: dict[str, int] = {}
+    pending_roles: list[tuple[str, list[Path], Path]] = []
     for group_path in groups:
         if attempted >= max_jobs:
             break
@@ -538,11 +762,12 @@ def run_pattern_stage(
                 inputs = [state["reviewed_pattern"], *context_inputs]
                 role = "rule-planner"
         elif stage == "codeql-author":
-            if not state["reviewed_pattern"].is_file() or not state["rule_plan"].is_file():
+            pattern_path = _pattern_input(state)
+            if pattern_path is None or not state["rule_plan"].is_file():
                 block_reason = "missing_pattern_or_rule_plan"
             elif state["codeql"] is None:
                 output = state["directory"] / "codeql-v1.json"
-                inputs = [state["reviewed_pattern"], state["rule_plan"], *context_inputs]
+                inputs = [pattern_path, state["rule_plan"], *context_inputs]
                 role = "codeql-author"
             elif state["reviewed_codeql_version"] < state["codeql_version"]:
                 skipped += 1
@@ -566,7 +791,7 @@ def run_pattern_stage(
                     preflight = _codeql_preflight(repo, state["codeql"])
                     output = state["directory"] / f"codeql-v{state['codeql_version'] + 1}.json"
                     inputs = [
-                        state["reviewed_pattern"],
+                        pattern_path,
                         state["rule_plan"],
                         state["codeql"],
                         state["reviewed_codeql"],
@@ -575,8 +800,11 @@ def run_pattern_stage(
                     ]
                 role = "codeql-author"
         elif stage == "codeql-review":
+            pattern_path = _pattern_input(state)
             if state["codeql"] is None:
                 block_reason = "missing_codeql_artifact"
+            elif pattern_path is None or not state["rule_plan"].is_file():
+                block_reason = "missing_pattern_or_rule_plan"
             elif state["reviewed_codeql_version"] == state["codeql_version"]:
                 skipped += 1
                 continue
@@ -584,7 +812,7 @@ def run_pattern_stage(
                 output = state["directory"] / f"codeql-v{state['codeql_version']}.reviewed.json"
                 preflight = _codeql_preflight(repo, state["codeql"])
                 inputs = [
-                    state["reviewed_pattern"],
+                    pattern_path,
                     state["rule_plan"],
                     state["codeql"],
                     preflight,
@@ -630,8 +858,14 @@ def run_pattern_stage(
             skipped += 1
             continue
         attempted += 1
-        if _run_role(role, repo, inputs, output, dry_run, split_path):
-            completed += 1
+        pending_roles.append((role, inputs, output))
+    completed += _run_role_batch(
+        pending_roles,
+        repo,
+        dry_run,
+        split_path,
+        workers,
+    )
     return {
         "stage": stage,
         "pattern_groups": len(groups),
@@ -641,6 +875,7 @@ def run_pattern_stage(
         "skipped": skipped,
         "blocked_reasons": reasons,
         "dry_run": dry_run,
+        "workers": workers,
     }
 
 
@@ -713,7 +948,7 @@ def main() -> None:
         "--workers",
         type=int,
         default=1,
-        help="Bounded case-level Codex workers; pattern stages remain serial",
+        help="Bounded isolated Codex workers; deterministic CodeQL gates remain serial",
     )
     run.add_argument("--dry-run", action="store_true")
     run.add_argument(
@@ -743,7 +978,14 @@ def main() -> None:
         else:
             if args.partition != "development":
                 raise ValueError("pattern/rule generation is Development-only")
-            result = run_pattern_stage(repo, campaign, args.stage, args.max_jobs, args.dry_run)
+            result = run_pattern_stage(
+                repo,
+                campaign,
+                args.stage,
+                args.max_jobs,
+                args.dry_run,
+                args.workers,
+            )
         if args.command == "run":
             run_log = _campaign_dir(repo, args.campaign_id) / "runs" / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{args.stage}.json"
             write_json(run_log, result)

@@ -12,6 +12,7 @@ GENERATOR_OR_REFINER_ROLES = {
     "pattern-reviewer",
     "rule-planner",
     "codeql-author",
+    "codeql-fast-author",
     "codeql-reviewer",
     "refiner",
 }

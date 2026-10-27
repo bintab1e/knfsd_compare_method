@@ -32,7 +32,12 @@ def validate(repo: Path) -> list[str]:
         raise ValueError("Authorized defensive security jobs must request Daybreak Blue")
     if llm.get("timeout_seconds") != 3600:
         raise ValueError("LLM roles must have the pinned 3600 second timeout")
-    messages.append("llm pin: gpt-5.6-sol/xhigh with Daybreak Blue and 3600s timeout")
+    role_efforts = llm.get("role_reasoning_effort", {})
+    if role_efforts != {"codeql-fast-author": "high"}:
+        raise ValueError("Only codeql-fast-author may use the pinned high fast-path effort")
+    messages.append(
+        "llm pin: gpt-5.6-sol/xhigh with Daybreak Blue; codeql-fast-author uses high"
+    )
 
     source_config = yaml.safe_load((repo / "config" / "sources.yaml").read_text(encoding="utf-8"))
     if len(source_config.get("sources", [])) != 8:
@@ -115,6 +120,7 @@ def validate(repo: Path) -> list[str]:
         "adjudicator",
         "refiner",
         "codeql-author",
+        "codeql-fast-author",
         "codeql-reviewer",
     }
     missing_prompts = sorted(

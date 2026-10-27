@@ -20,6 +20,7 @@ jobs:
       - run: python -m compileall -q src tests
       - run: pytest -q
       - run: compare-validate --repo "$GITHUB_WORKSPACE"
+      - run: python scripts/prepush_audit.py "$GITHUB_WORKSPACE"
 
   codeql-pack:
     runs-on: ubuntu-24.04

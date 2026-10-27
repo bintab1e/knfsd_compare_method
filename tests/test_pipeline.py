@@ -8,6 +8,74 @@ import compare_method.pipeline as pipeline
 from compare_method.pipeline import _group_state, _source_is_v2_only, init_campaign, selected_case_paths
 
 
+def _fast_artifact(status="proposed"):
+    return {
+        "schema_version": "1.0.0",
+        "pattern_id": "PATTERN-TEST-01",
+        "pattern_ir_version": 1,
+        "rule_plan_version": 1,
+        "artifact_version": 1,
+        "status": status,
+        "pack": {
+            "name": "tobabz/fast-test",
+            "version": "0.1.0",
+            "dependencies": {"codeql/cpp-all": "*"},
+        },
+        "queries": [
+            {
+                "path": "queries/Test.ql",
+                "rule_id": "tobabz/test",
+                "tier": "strict",
+                "query_kind": "problem",
+                "content": "/**\n * @id tobabz/test\n * @kind problem\n */\nimport cpp\nfrom Function f select f, f.getName()",
+            }
+        ],
+        "tests": [
+            {"path": "tests/test/test.cpp", "content": "void bad() {}"},
+            {"path": "tests/test/Test.qlref", "content": "queries/Test.ql"},
+            {"path": "tests/test/Test.expected", "content": ""},
+        ],
+        "controls": [
+            {
+                "control_id": "positive",
+                "expectation": "hit",
+                "description": "positive",
+                "test_paths": ["tests/test/test.cpp", "tests/test/Test.expected"],
+            },
+            {
+                "control_id": "negative",
+                "expectation": "no_hit",
+                "description": "negative",
+                "test_paths": ["tests/test/test.cpp", "tests/test/Test.expected"],
+            },
+        ],
+        "review_notes": [],
+    }
+
+
+def _fast_plan():
+    return {
+        "pattern_id": "PATTERN-TEST-01",
+        "pattern_ir_version": 1,
+        "rule_plan_version": 1,
+        "codeql_support": "direct",
+        "sources": ["decoded count"],
+        "sinks": ["copy"],
+        "flow_steps": [],
+        "required_guards": ["finite bound"],
+        "barriers": [],
+        "scope_constraints": ["remote KNFSd"],
+        "rule_variants": [
+            {
+                "rule_id": "tobabz/test",
+                "tier": "strict",
+                "protocol_scope": ["nfs3"],
+                "processing_stage": ["decode"],
+            }
+        ],
+    }
+
+
 def test_v2_only_filter_is_narrow() -> None:
     base = {"facts": {"protocol_versions_raw": ["NFSv2"]}}
     assert _source_is_v2_only(base)
@@ -85,3 +153,65 @@ def test_role_batch_respects_worker_bound(monkeypatch, tmp_path: Path) -> None:
 
     assert completed == 6
     assert max_active == 2
+
+
+def test_fast_bundle_derives_plan_and_artifact(tmp_path: Path) -> None:
+    source_root = Path(__file__).resolve().parents[1]
+    (tmp_path / "schemas").mkdir()
+    for name in ("rule-plan.schema.json", "codeql-artifact.schema.json"):
+        (tmp_path / "schemas" / name).write_text(
+            (source_root / "schemas" / name).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    directory = tmp_path / "patterns/groups/GROUP-TEST"
+    directory.mkdir(parents=True)
+    pattern = directory / "v1.json"
+    pattern.write_text(json.dumps({"pattern_id": "PATTERN-TEST-01"}), encoding="utf-8")
+    bundle = directory / "fast-bundle-v1.json"
+    bundle.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "rule_plan": _fast_plan(),
+                "codeql_artifact": _fast_artifact(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    state = {
+        "directory": directory,
+        "pattern": pattern,
+        "reviewed_pattern": directory / "v1.reviewed.json",
+        "rule_plan": directory / "rule-plan-v1.json",
+        "fast_bundle": bundle,
+    }
+    pipeline._derive_fast_bundle(tmp_path, state)
+    assert json.loads(state["rule_plan"].read_text(encoding="utf-8"))["codeql_support"] == "direct"
+    assert json.loads((directory / "codeql-v1.json").read_text(encoding="utf-8"))["status"] == "proposed"
+
+
+def test_fast_gate_accepts_only_deterministic_pass(monkeypatch, tmp_path: Path) -> None:
+    source_root = Path(__file__).resolve().parents[1]
+    (tmp_path / "schemas").mkdir()
+    (tmp_path / "schemas/codeql-artifact.schema.json").write_text(
+        (source_root / "schemas/codeql-artifact.schema.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    directory = tmp_path / "patterns/groups/GROUP-TEST"
+    directory.mkdir(parents=True)
+    artifact_path = directory / "codeql-v1.json"
+    artifact_path.write_text(json.dumps(_fast_artifact()), encoding="utf-8")
+    verification = tmp_path / "preflight.json"
+    verification.write_text(
+        json.dumps({"gate": {"compiled": True, "qltests_passed": True}}), encoding="utf-8"
+    )
+    monkeypatch.setattr(pipeline, "_codeql_preflight", lambda repo, artifact: verification)
+    monkeypatch.setattr(pipeline, "materialize", lambda repo, artifact, root: (tmp_path / "pack", {}))
+    monkeypatch.setattr(
+        pipeline,
+        "verify_pack",
+        lambda repo, pack: {"gate": {"compiled": True, "qltests_passed": True}},
+    )
+    state = {"directory": directory, "codeql": artifact_path, "codeql_version": 1}
+    assert pipeline._fast_gate_artifact(tmp_path, state, False) == "accepted"
+    reviewed = json.loads((directory / "codeql-v1.reviewed.json").read_text(encoding="utf-8"))
+    assert reviewed["status"] == "accepted"

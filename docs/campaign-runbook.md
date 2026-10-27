@@ -30,7 +30,7 @@ Review `evidence/cases/*/manifest.json` after each batch. Collection is
 content-addressed and resumable: already verified payloads are reused. Blocked
 URLs stay explicit. Do not weaken the host allowlist to make a batch green.
 
-## 3. Development roles
+## 3. Development roles and fast feedback
 
 Run and inspect each stage before advancing:
 
@@ -41,30 +41,45 @@ for stage in extraction extraction-review mapping context mapping-review; do
     --partition development --stage "$stage" --max-jobs 40 --workers 8
 done
 
-for stage in pattern pattern-review rule-plan codeql-author codeql-review codeql-materialize; do
-  .venv/bin/compare-pipeline --repo . run \
-    --campaign-id CAMPAIGN-KNFSD-V73-001 \
-    --partition development --stage "$stage" --max-jobs 5
-done
+.venv/bin/compare-pipeline --repo . run \
+  --campaign-id CAMPAIGN-KNFSD-V73-001 \
+  --partition development --stage pattern --max-jobs 40 --workers 4
+
+.venv/bin/compare-pipeline --repo . run \
+  --campaign-id CAMPAIGN-KNFSD-V73-001 \
+  --partition development --stage codeql-fast-author --max-jobs 40 --workers 4
+
+.venv/bin/compare-pipeline --repo . run \
+  --campaign-id CAMPAIGN-KNFSD-V73-001 \
+  --partition development --stage codeql-fast-gate --max-jobs 40
 ```
 
 `--max-jobs` bounds the number of new case outputs created by one resumable
-invocation. `--workers` bounds concurrent case-level Codex processes; it does
+invocation. `--workers` bounds concurrent isolated Codex processes; it does
 not create shared sessions or bypass partition access checks. Start with four
-workers, increase only after a small successful batch, and keep pattern/rule
-stages serial.
+pattern workers and never exceed eight total workers.
 
 `context` is deterministic and verifies an exact clean v7.3 source tree. Mapping review, not the mapper proposal, decides KNFSD applicability.
-Before `codeql-review` calls the independent reviewer, it materializes the
-proposed artifact in a content-hash preflight directory and supplies the real
-CodeQL compile and qltest report. Only a reviewed artifact with `accepted`
-status can enter the final materialization and scan gates.
-If review returns `needs_revision`, run `codeql-author` again. A `rejected`
-artifact is quarantined and requires an explicit new design decision rather
-than an automatic retry.
-The pipeline passes the prior artifact, review, and preflight report into a new
-`codeql-vN.json`, then `codeql-review` reviews that exact version. Repeat until
-accepted; no failed version is overwritten.
+`codeql-fast-author` creates the rule plan, query, and qltests in one isolated
+job. It accepts either a proposed or reviewed Pattern IR. `codeql-fast-gate`
+then uses deterministic CodeQL compilation and qltest instead of a second LLM
+review. Passing rules are accepted and materialized; failures become
+`needs_revision` and are the only rules sent to `codeql-author` for a bounded
+repair. No failed version is overwritten.
+
+The legacy `pattern-review`, `rule-plan`, and `codeql-review` stages remain
+available for an explicitly escalated investigation, but they are not part of
+the default Round-0 path.
+
+After all fast gates and bounded repairs, scan the accepted queries together:
+
+```bash
+.venv/bin/compare-batch-scan --repo . \
+  --campaign-id CAMPAIGN-KNFSD-V73-001 --round 1
+```
+
+The batch command invokes `codeql database analyze` once, then splits SARIF
+and normalized candidates back into independent per-pattern Round directories.
 
 ## 4. One pattern round
 
@@ -80,6 +95,18 @@ Create a round manifest with reviewed inputs, then use this order:
 8. `compare-round-pipeline refine`
 
 KCSAN jobs request 100 effective target-reached executions. Attempts that miss the target do not count toward 100.
+
+For a resumable end-to-end fast campaign, use:
+
+```bash
+.venv/bin/compare-campaign-driver --repo . \
+  --campaign-id CAMPAIGN-KNFSD-V73-001 \
+  --workers 8 --pattern-workers 4 --max-repair-rounds 3 --round 1
+```
+
+The driver never feeds Validation or Sealed Holdout inputs to rule generation
+or repair. It completes Development fast gates and the batch scan before it
+starts those partitions.
 
 ## 5. Evaluation and promotion
 

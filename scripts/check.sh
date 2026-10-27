@@ -7,6 +7,7 @@ cd "$repo_dir"
 .venv/bin/python -m compileall -q src tests
 .venv/bin/python -m pytest -q
 .venv/bin/compare-validate --repo "$repo_dir"
+.venv/bin/python scripts/prepush_audit.py "$repo_dir"
 
 codeql_bin="external/codeql-v2.27.3/codeql"
 if [[ -d "$codeql_bin" ]]; then
