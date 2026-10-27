@@ -629,8 +629,12 @@ def _run_fast_author_stage(
             skipped += 1
             continue
         if state["fast_bundle"].is_file():
-            _derive_fast_bundle(repo, state)
-            completed += 1
+            try:
+                _derive_fast_bundle(repo, state)
+                completed += 1
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                blocked += 1
+                reasons["invalid_fast_bundle"] = reasons.get("invalid_fast_bundle", 0) + 1
             continue
         if attempted >= max_jobs:
             break
@@ -661,8 +665,12 @@ def _run_fast_author_stage(
     _run_role_batch(jobs, repo, dry_run, split_path, workers)
     if not dry_run:
         for state in selected_states:
-            _derive_fast_bundle(repo, state)
-            completed += 1
+            try:
+                _derive_fast_bundle(repo, state)
+                completed += 1
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                blocked += 1
+                reasons["invalid_fast_bundle"] = reasons.get("invalid_fast_bundle", 0) + 1
     else:
         completed += len(selected_states)
     return {

@@ -61,11 +61,14 @@ pattern workers and never exceed eight total workers.
 
 `context` is deterministic and verifies an exact clean v7.3 source tree. Mapping review, not the mapper proposal, decides KNFSD applicability.
 `codeql-fast-author` creates the rule plan, query, and qltests in one isolated
-job. It accepts either a proposed or reviewed Pattern IR. `codeql-fast-gate`
-then uses deterministic CodeQL compilation and qltest instead of a second LLM
-review. Passing rules are accepted and materialized; failures become
-`needs_revision` and are the only rules sent to `codeql-author` for a bounded
-repair. No failed version is overwritten.
+job. It accepts either a proposed or reviewed Pattern IR. The driver authors 16
+patterns at a time with four workers and immediately runs `codeql-fast-gate`
+for that batch, so deterministic feedback starts before every pattern is
+authored. Invalid bundles are quarantined without stopping unrelated patterns.
+The gate uses CodeQL compilation and qltest instead of a second LLM review.
+Passing rules are accepted and materialized; failures become `needs_revision`
+and are the only rules sent to `codeql-author` for a bounded repair. No failed
+version is overwritten.
 
 The legacy `pattern-review`, `rule-plan`, and `codeql-review` stages remain
 available for an explicitly escalated investigation, but they are not part of

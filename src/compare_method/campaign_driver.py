@@ -178,12 +178,36 @@ def drive_fast_patterns(
         pipeline.run_pattern_stage(
             repo, campaign, "pattern", metrics["groups"], False, workers=pattern_workers
         )
-    pipeline.run_pattern_stage(
-        repo, campaign, "codeql-fast-author", metrics["groups"], False, workers=pattern_workers
-    )
-    pipeline.run_pattern_stage(
-        repo, campaign, "codeql-fast-gate", metrics["groups"], False, workers=1
-    )
+    author_batch_size = pattern_workers * 4
+    maximum_batches = (metrics["groups"] + author_batch_size - 1) // author_batch_size + 2
+    for batch_number in range(1, maximum_batches + 1):
+        before = group_metrics(repo, campaign)
+        if before["codeql"] >= before["groups"]:
+            break
+        pipeline.run_pattern_stage(
+            repo,
+            campaign,
+            "codeql-fast-author",
+            author_batch_size,
+            False,
+            workers=pattern_workers,
+        )
+        pipeline.run_pattern_stage(
+            repo, campaign, "codeql-fast-gate", before["groups"], False, workers=1
+        )
+        after = group_metrics(repo, campaign)
+        emit(
+            "fast_author_batch_finished",
+            batch_number=batch_number,
+            batch_size=author_batch_size,
+            before=before,
+            after=after,
+        )
+        if (
+            after["fast_bundles"] == before["fast_bundles"]
+            and after["codeql"] == before["codeql"]
+        ):
+            break
     for repair_round in range(1, max_repair_rounds + 1):
         before = group_metrics(repo, campaign)
         if before["needs_revision"] == 0:
