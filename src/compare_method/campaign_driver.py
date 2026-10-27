@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator
+
 from . import pipeline
 from .batch_scan import run_batch_scan
-from .common import repo_root
+from .common import repo_root, sha256_file, write_json
+from .dataset_split import case_ids_in_value
 
 
 TERMINAL_EXTRACTION = {"accepted", "insufficient_evidence", "rejected"}
@@ -63,37 +67,32 @@ def group_metrics(repo: Path, campaign: dict[str, Any]) -> dict[str, int]:
         pipeline._group_state(repo, path)
         for path in pipeline.build_pattern_groups(repo, campaign)
     ]
-    accepted = needs_revision = rejected = materialized = 0
+    preflight_passed = semantically_accepted = needs_revision = rejected = 0
     for state in states:
         reviewed = state["reviewed_codeql"]
         if reviewed is None:
             continue
         artifact = _load(reviewed)
         status = artifact["status"]
-        accepted += status == "accepted"
+        preflight_passed += status == "preflight_passed"
         needs_revision += status == "needs_revision"
         rejected += status == "rejected"
-        verification = (
-            repo
-            / "codeql"
-            / "generated"
-            / artifact["pattern_id"]
-            / f"v{artifact['artifact_version']}"
-            / "verification.json"
-        )
-        if verification.is_file():
-            gate = _load(verification).get("gate", {})
-            materialized += gate.get("compiled") is True and gate.get("qltests_passed") is True
+        semantic_path = state["semantic_review"]
+        if semantic_path and state["semantic_review_version"] == state["codeql_version"]:
+            semantic = pipeline._validate_semantic_review(repo, state, semantic_path)
+            semantically_accepted += semantic["status"] == "semantically_accepted"
+            needs_revision += semantic["status"] == "needs_revision"
+            rejected += semantic["status"] == "rejected"
     return {
         "groups": len(states),
         "patterns": sum(state["pattern"].is_file() for state in states),
         "fast_bundles": sum(state["fast_bundle"].is_file() for state in states),
         "rule_plans": sum(state["rule_plan"].is_file() for state in states),
         "codeql": sum(state["codeql"] is not None for state in states),
-        "accepted": accepted,
+        "preflight_passed": preflight_passed,
+        "semantically_accepted": semantically_accepted,
         "needs_revision": needs_revision,
         "rejected": rejected,
-        "materialized": materialized,
     }
 
 
@@ -195,6 +194,14 @@ def drive_fast_patterns(
         pipeline.run_pattern_stage(
             repo, campaign, "codeql-fast-gate", before["groups"], False, workers=1
         )
+        pipeline.run_pattern_stage(
+            repo,
+            campaign,
+            "codeql-review",
+            before["groups"],
+            False,
+            workers=pattern_workers,
+        )
         after = group_metrics(repo, campaign)
         emit(
             "fast_author_batch_finished",
@@ -208,6 +215,18 @@ def drive_fast_patterns(
             and after["codeql"] == before["codeql"]
         ):
             break
+    current = group_metrics(repo, campaign)
+    pipeline.run_pattern_stage(
+        repo, campaign, "codeql-fast-gate", current["groups"], False, workers=1
+    )
+    pipeline.run_pattern_stage(
+        repo,
+        campaign,
+        "codeql-review",
+        current["groups"],
+        False,
+        workers=pattern_workers,
+    )
     for repair_round in range(1, max_repair_rounds + 1):
         before = group_metrics(repo, campaign)
         if before["needs_revision"] == 0:
@@ -219,6 +238,14 @@ def drive_fast_patterns(
         pipeline.run_pattern_stage(
             repo, campaign, "codeql-fast-gate", before["groups"], False, workers=1
         )
+        pipeline.run_pattern_stage(
+            repo,
+            campaign,
+            "codeql-review",
+            before["groups"],
+            False,
+            workers=pattern_workers,
+        )
         after = group_metrics(repo, campaign)
         emit("conditional_repair_finished", repair_round=repair_round, metrics=after)
         if after == before:
@@ -227,7 +254,7 @@ def drive_fast_patterns(
     emit(
         "fast_pattern_pipeline_finished",
         metrics=metrics,
-        quarantined_after_fast_gate=metrics["needs_revision"] + metrics["rejected"],
+        quarantined_after_review=metrics["needs_revision"] + metrics["rejected"],
     )
     return metrics
 
@@ -247,51 +274,143 @@ def run_campaign(
     campaign = _campaign(repo, campaign_id)
     drive_case_partition(repo, campaign, "development", workers)
     pattern_metrics = drive_fast_patterns(repo, campaign, pattern_workers, max_repair_rounds)
-    if pattern_metrics["materialized"] == 0:
-        raise RuntimeError("no rules passed deterministic compile/qltest gates")
+    if pattern_metrics["semantically_accepted"] == 0:
+        raise RuntimeError("no rules passed independent semantic review")
     batch = run_batch_scan(repo, campaign_id, round_number, normalize=True)
     emit(
         "batch_scan_finished",
         pattern_count=batch["pattern_count"],
         query_count=batch["query_count"],
+        quarantined_query_count=batch["quarantined_query_count"],
     )
     drive_case_partition(repo, campaign, "validation", workers)
-    drive_case_partition(repo, campaign, "sealed_holdout", workers)
     completion = {
         "completed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "campaign_id": campaign_id,
+        "pipeline_state": (
+            "STATIC_SCAN_COMPLETE_WITH_QUARANTINE"
+            if batch["status"] == "PARTIAL"
+            else "STATIC_SCAN_COMPLETE"
+        ),
+        "stage_status": {
+            "RULE_BUILD": "COMPLETE",
+            "STATIC_SCAN": "PARTIAL" if batch["status"] == "PARTIAL" else "COMPLETE",
+            "VALIDATION_DATA_PREPARATION": "COMPLETE",
+            "SEALED_HOLDOUT": "LOCKED",
+            "RUNTIME_VALIDATION": "PENDING",
+            "ADJUDICATION": "PENDING",
+            "PROMOTION": "PENDING",
+        },
         "development": case_metrics(repo, campaign, "development"),
         "patterns": group_metrics(repo, campaign),
         "batch_scan": {
             "round": round_number,
+            "status": batch["status"],
+            "batch_input_hash": batch["batch_input_hash"],
             "pattern_count": batch["pattern_count"],
             "query_count": batch["query_count"],
+            "quarantined_query_count": batch["quarantined_query_count"],
         },
         "validation": case_metrics(repo, campaign, "validation"),
-        "sealed_holdout": case_metrics(repo, campaign, "sealed_holdout"),
-        "holdout_feedback_used": False,
+        "sealed_holdout": {
+            "status": "LOCKED",
+            "commitment": _load(repo / campaign["split"]["public_path"])["sealed_holdout"]["commitment"],
+        },
     }
-    emit("campaign_driver_finished", completion=completion)
+    emit("static_preparation_finished", completion=completion)
     return completion
 
 
+def release_milestone_holdout(
+    repo: Path,
+    campaign_id: str,
+    milestone_id: str,
+    aggregate_path: Path,
+    confirmation: str,
+) -> dict[str, Any]:
+    """Release one aggregate-only holdout result without exposing case details."""
+    if confirmation != "RELEASE-SEALED-HOLDOUT":
+        raise ValueError("exact --confirm RELEASE-SEALED-HOLDOUT is required")
+    if not re.fullmatch(r"MILESTONE-[A-Z0-9-]+", milestone_id):
+        raise ValueError("milestone ID must match MILESTONE-[A-Z0-9-]+")
+    campaign = _campaign(repo, campaign_id)
+    aggregate = _load(aggregate_path)
+    schema = _load(repo / "schemas" / "holdout-aggregate.schema.json")
+    Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).validate(
+        aggregate
+    )
+    if aggregate["campaign_id"] != campaign_id or aggregate["milestone_id"] != milestone_id:
+        raise ValueError("holdout aggregate campaign or milestone binding differs")
+    if case_ids_in_value(aggregate):
+        raise ValueError("holdout aggregate must not contain case-level identifiers")
+    public_path = repo / campaign["split"]["public_path"]
+    if sha256_file(public_path) != campaign["split"]["public_sha256"]:
+        raise ValueError("public split manifest hash changed after campaign initialization")
+    commitment = _load(public_path)["sealed_holdout"]["commitment"]
+    if aggregate["sealed_holdout_commitment"] != commitment:
+        raise ValueError("holdout aggregate commitment does not match the sealed split")
+    ledger_path = pipeline._campaign_dir(repo, campaign_id) / "control" / "holdout-release.json"
+    if ledger_path.exists():
+        raise ValueError("Sealed Holdout aggregate has already been released for this campaign")
+    output = (
+        pipeline._campaign_dir(repo, campaign_id)
+        / "milestones"
+        / milestone_id
+        / "sealed-holdout.aggregate.json"
+    )
+    write_json(output, aggregate)
+    ledger = {
+        "schema_version": "1.0.0",
+        "campaign_id": campaign_id,
+        "milestone_id": milestone_id,
+        "released_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "aggregate_path": str(output),
+        "aggregate_sha256": sha256_file(output),
+        "sealed_holdout_commitment": commitment,
+        "case_level_results_released": False,
+    }
+    write_json(ledger_path, ledger)
+    emit("sealed_holdout_aggregate_released", release=ledger)
+    return ledger
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the fast-feedback KNFSd campaign driver.")
+    parser = argparse.ArgumentParser(
+        description="Prepare KNFSd rules and static scan results; runtime validation remains separate."
+    )
     parser.add_argument("--repo", type=Path, default=repo_root())
     parser.add_argument("--campaign-id", required=True)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--pattern-workers", type=int, default=4)
     parser.add_argument("--max-repair-rounds", type=int, default=3)
     parser.add_argument("--round", type=int, default=1)
+    parser.add_argument("--milestone-holdout", action="store_true")
+    parser.add_argument("--holdout-aggregate", type=Path)
+    parser.add_argument("--milestone-id")
+    parser.add_argument("--confirm")
     args = parser.parse_args()
-    result = run_campaign(
-        args.repo.resolve(),
-        args.campaign_id,
-        args.workers,
-        args.pattern_workers,
-        args.max_repair_rounds,
-        args.round,
-    )
+    repo = args.repo.resolve()
+    if args.milestone_holdout:
+        if not args.holdout_aggregate or not args.milestone_id:
+            parser.error("--milestone-holdout requires --holdout-aggregate and --milestone-id")
+        result = release_milestone_holdout(
+            repo,
+            args.campaign_id,
+            args.milestone_id,
+            args.holdout_aggregate.resolve(),
+            args.confirm or "",
+        )
+    else:
+        if args.holdout_aggregate or args.milestone_id or args.confirm:
+            parser.error("holdout arguments require --milestone-holdout")
+        result = run_campaign(
+            repo,
+            args.campaign_id,
+            args.workers,
+            args.pattern_workers,
+            args.max_repair_rounds,
+            args.round,
+        )
     print(json.dumps(result, indent=2))
 
 

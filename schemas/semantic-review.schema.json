@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Independent semantic decision for a KNFSd CodeQL artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pattern_id", "artifact_version", "artifact_sha256", "status", "risk_tier", "remote_scope_verified", "invariant_implemented", "guards_verified", "realistic_tests", "findings", "review_notes"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "pattern_id": {"type": "string", "pattern": "^PATTERN-[A-Z0-9-]+$"},
+    "artifact_version": {"type": "integer", "minimum": 1},
+    "artifact_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "status": {"enum": ["semantically_accepted", "needs_revision", "rejected"]},
+    "risk_tier": {"enum": ["standard", "elevated", "critical"]},
+    "remote_scope_verified": {"type": "boolean"},
+    "invariant_implemented": {"type": "boolean"},
+    "guards_verified": {"type": "boolean"},
+    "realistic_tests": {"type": "boolean"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "code", "message"],
+        "properties": {
+          "severity": {"enum": ["info", "warning", "error"]},
+          "code": {"type": "string", "minLength": 1},
+          "message": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "review_notes": {"type": "array", "items": {"type": "string"}}
+  }
+}

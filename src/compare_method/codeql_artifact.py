@@ -34,11 +34,13 @@ def _safe_relative(value: str, *, tests: bool) -> PurePosixPath:
 def validate_artifact(repo: Path, artifact: dict[str, Any], allow_proposed: bool = False) -> None:
     schema = json.loads((repo / "schemas" / "codeql-artifact.schema.json").read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(artifact)
-    preflight_statuses = {"proposed", "needs_revision"}
-    if artifact["status"] != "accepted" and not (
+    preflight_statuses = {"proposed", "preflight_passed", "needs_revision"}
+    if artifact["status"] != "preflight_passed" and not (
         allow_proposed and artifact["status"] in preflight_statuses
     ):
-        raise ValueError(f"CodeQL artifact status is {artifact['status']}, not accepted")
+        raise ValueError(
+            f"CodeQL artifact status is {artifact['status']}, not preflight_passed"
+        )
     if not PATTERN_RE.fullmatch(artifact["pattern_id"]):
         raise ValueError("invalid pattern identifier")
     paths = []
@@ -240,7 +242,7 @@ def main() -> None:
     parser.add_argument(
         "--allow-proposed",
         action="store_true",
-        help="Permit proposed or needs_revision artifacts for deterministic preflight only",
+        help="Permit proposed, preflight_passed, or needs_revision artifacts for deterministic preflight only",
     )
     parser.add_argument("--verify", action="store_true")
     parser.add_argument("--database", type=Path)

@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
-from compare_method.round_pipeline import init_round, round_status
+import pytest
+
+from compare_method.round_pipeline import init_round, round_status, scan
 
 
 def test_round_manifest_binds_inputs_and_starts_empty(tmp_path: Path) -> None:
@@ -31,3 +33,33 @@ def test_round_init_is_idempotent(tmp_path: Path) -> None:
     first = init_round(tmp_path, "CAMPAIGN-TEST", 1, pattern, plan, artifact, [])
     second = init_round(tmp_path, "CAMPAIGN-TEST", 1, pattern, plan, artifact, [])
     assert first == second
+
+
+def test_round_init_rejects_changed_input_binding(tmp_path: Path) -> None:
+    pattern = tmp_path / "pattern.json"
+    plan = tmp_path / "plan.json"
+    artifact = tmp_path / "artifact.json"
+    pattern.write_text(json.dumps({"pattern_id": "PATTERN-TEST-01"}), encoding="utf-8")
+    plan.write_text("{}", encoding="utf-8")
+    artifact.write_text(json.dumps({"pattern_id": "PATTERN-TEST-01", "v": 1}), encoding="utf-8")
+    init_round(tmp_path, "CAMPAIGN-TEST", 1, pattern, plan, artifact, [])
+    artifact.write_text(json.dumps({"pattern_id": "PATTERN-TEST-01", "v": 2}), encoding="utf-8")
+    with pytest.raises(ValueError, match="input binding differs"):
+        init_round(tmp_path, "CAMPAIGN-TEST", 1, pattern, plan, artifact, [])
+
+
+def test_round_scan_requires_semantic_review_binding(tmp_path: Path) -> None:
+    pattern = tmp_path / "pattern.json"
+    plan = tmp_path / "plan.json"
+    artifact = tmp_path / "artifact.json"
+    pattern.write_text(json.dumps({"pattern_id": "PATTERN-TEST-01"}), encoding="utf-8")
+    plan.write_text("{}", encoding="utf-8")
+    artifact.write_text(
+        json.dumps({"pattern_id": "PATTERN-TEST-01", "status": "preflight_passed"}),
+        encoding="utf-8",
+    )
+    manifest_path, _ = init_round(
+        tmp_path, "CAMPAIGN-TEST", 1, pattern, plan, artifact, []
+    )
+    with pytest.raises(ValueError, match="semantic review binding"):
+        scan(tmp_path, manifest_path)

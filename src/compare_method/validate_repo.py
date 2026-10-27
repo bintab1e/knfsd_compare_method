@@ -68,13 +68,17 @@ def validate(repo: Path) -> list[str]:
         raise ValueError("CodeQL scan RAM must be pinned to 4096 MiB")
     if codeql.get("scan", {}).get("timeout_seconds") != 900:
         raise ValueError("CodeQL scan timeout must be pinned to 900 seconds")
+    if codeql.get("scan", {}).get("batch_size") != 16:
+        raise ValueError("CodeQL static scans must use isolated batches of 16")
+    if codeql.get("scan", {}).get("batch_chunk_timeout_seconds") != 1800:
+        raise ValueError("CodeQL batch chunk timeout must be pinned to 1800 seconds")
     if codeql.get("database", {}).get("path") != "codeql-db/linux-v7.3-vanilla-v4":
         raise ValueError("CodeQL database path must identify the verified v7.3 target database")
     if codeql.get("database", {}).get("expected_source_commit") != (
         "c03c1a14507dfaf8b856c2608f9ac216021fc222"
     ):
         raise ValueError("CodeQL database source must be pinned to exact vanilla Linux v7.3")
-    messages.append("CodeQL: 2.27.3/cpp pinned")
+    messages.append("CodeQL: 2.27.3/cpp pinned; content-addressed batches of 16")
 
     query_pack = repo / "codeql" / "knfsd-rules"
     required_queries = {

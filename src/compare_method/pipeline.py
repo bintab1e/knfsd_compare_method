@@ -340,6 +340,10 @@ def run_case_stage(
     allow_fact_only: bool = False,
     workers: int = 1,
 ) -> dict[str, Any]:
+    if partition == "sealed_holdout":
+        raise ValueError(
+            "Sealed Holdout is locked; use the explicit one-time milestone aggregate release"
+        )
     split_path, _ = _split(repo, campaign)
     case_paths, excluded_v2 = selected_case_paths(repo, campaign, partition)
     attempted = completed = blocked = skipped = 0
@@ -476,6 +480,7 @@ def _group_state(repo: Path, group_path: Path) -> dict[str, Any]:
     directory = repo / "patterns" / "groups" / group_id
     proposed: list[tuple[int, Path]] = []
     reviewed: list[tuple[int, Path]] = []
+    semantic_reviews: list[tuple[int, Path]] = []
     for path in directory.glob("codeql-v*.json"):
         if path.name.endswith(".audit.json"):
             continue
@@ -484,6 +489,12 @@ def _group_state(repo: Path, group_path: Path) -> dict[str, Any]:
             continue
         target = reviewed if match.group(2) else proposed
         target.append((int(match.group(1)), path))
+    for path in directory.glob("semantic-review-v*.json"):
+        if path.name.endswith(".audit.json"):
+            continue
+        match = re.fullmatch(r"semantic-review-v(\d+)\.json", path.name)
+        if match:
+            semantic_reviews.append((int(match.group(1)), path))
     return {
         "group": _json(group_path),
         "group_path": group_path,
@@ -496,6 +507,8 @@ def _group_state(repo: Path, group_path: Path) -> dict[str, Any]:
         "codeql_version": max(proposed)[0] if proposed else 0,
         "reviewed_codeql": max(reviewed)[1] if reviewed else None,
         "reviewed_codeql_version": max(reviewed)[0] if reviewed else 0,
+        "semantic_review": max(semantic_reviews)[1] if semantic_reviews else None,
+        "semantic_review_version": max(semantic_reviews)[0] if semantic_reviews else 0,
     }
 
 
@@ -565,7 +578,7 @@ def _derive_fast_bundle(repo: Path, state: dict[str, Any]) -> None:
 
 
 def _fast_gate_artifact(repo: Path, state: dict[str, Any], dry_run: bool) -> str:
-    """Accept passing initial rules without a second LLM call; retain failures for repair."""
+    """Record syntax/test preflight without claiming semantic acceptance."""
     artifact_path = state["codeql"]
     if artifact_path is None:
         return "missing"
@@ -579,7 +592,7 @@ def _fast_gate_artifact(repo: Path, state: dict[str, Any], dry_run: bool) -> str
     gate = verification.get("gate", {})
     passed = gate.get("compiled") is True and gate.get("qltests_passed") is True
     artifact = _json(artifact_path)
-    artifact["status"] = "accepted" if passed else "needs_revision"
+    artifact["status"] = "preflight_passed" if passed else "needs_revision"
     artifact["review_notes"] = [
         *artifact.get("review_notes", []),
         (
@@ -589,7 +602,7 @@ def _fast_gate_artifact(repo: Path, state: dict[str, Any], dry_run: bool) -> str
             f"verification_sha256={sha256_file(preflight)}"
         ),
     ]
-    validate_artifact(repo, artifact, allow_proposed=not passed)
+    validate_artifact(repo, artifact, allow_proposed=True)
     _write_immutable_json(output, artifact)
     _write_immutable_json(
         output.with_suffix(output.suffix + ".audit.json"),
@@ -601,12 +614,6 @@ def _fast_gate_artifact(repo: Path, state: dict[str, Any], dry_run: bool) -> str
             "decision": artifact["status"],
         },
     )
-    if passed:
-        pack_dir, _ = materialize(repo, output, repo / "codeql" / "generated")
-        final = verify_pack(repo, pack_dir)
-        final_gate = final["gate"]
-        if not final_gate["compiled"] or not final_gate["qltests_passed"]:
-            raise RuntimeError(f"final fast gate changed result for {artifact['pattern_id']}")
     return artifact["status"]
 
 
@@ -693,7 +700,7 @@ def _run_fast_gate_stage(
     dry_run: bool,
 ) -> dict[str, Any]:
     attempted = completed = blocked = skipped = 0
-    decisions = {"accepted": 0, "needs_revision": 0, "dry_run": 0}
+    decisions = {"preflight_passed": 0, "needs_revision": 0, "dry_run": 0}
     for group_path in groups:
         state = _group_state(repo, group_path)
         if state["codeql"] is None:
@@ -720,6 +727,35 @@ def _run_fast_gate_stage(
         "dry_run": dry_run,
         "workers": 1,
     }
+
+
+def _validate_semantic_review(
+    repo: Path, state: dict[str, Any], review_path: Path
+) -> dict[str, Any]:
+    review = _json(review_path)
+    schema = _json(repo / "schemas" / "semantic-review.schema.json")
+    Draft202012Validator(schema).validate(review)
+    gate_path = state["reviewed_codeql"]
+    if gate_path is None or state["reviewed_codeql_version"] != state["codeql_version"]:
+        raise ValueError("semantic review has no matching preflight artifact")
+    artifact = _json(gate_path)
+    if artifact["status"] != "preflight_passed":
+        raise ValueError("semantic review may only consume preflight_passed artifacts")
+    if review["pattern_id"] != artifact["pattern_id"]:
+        raise ValueError("semantic review pattern does not match the artifact")
+    if review["artifact_version"] != artifact["artifact_version"]:
+        raise ValueError("semantic review version does not match the artifact")
+    if review["artifact_sha256"] != sha256_file(gate_path):
+        raise ValueError("semantic review SHA-256 does not bind the preflight artifact")
+    checks = (
+        review["remote_scope_verified"],
+        review["invariant_implemented"],
+        review["guards_verified"],
+        review["realistic_tests"],
+    )
+    if review["status"] == "semantically_accepted" and not all(checks):
+        raise ValueError("semantically_accepted requires every semantic check to pass")
+    return review
 
 
 def run_pattern_stage(
@@ -781,17 +817,26 @@ def run_pattern_stage(
                 skipped += 1
                 continue
             else:
-                review = _json(state["reviewed_codeql"])
-                if review["status"] == "accepted":
+                gate = _json(state["reviewed_codeql"])
+                semantic = None
+                if state["semantic_review_version"] == state["codeql_version"]:
+                    semantic = _validate_semantic_review(
+                        repo, state, state["semantic_review"]
+                    )
+                if gate["status"] == "preflight_passed" and semantic is None:
                     skipped += 1
                     continue
-                if review["status"] == "rejected":
+                decision = semantic["status"] if semantic else gate["status"]
+                if decision == "semantically_accepted":
+                    skipped += 1
+                    continue
+                if decision == "rejected":
                     block_reason = "codeql_rejected_quarantine"
                     output = state["directory"] / f"codeql-v{state['codeql_version'] + 1}.json"
                     inputs = []
                     role = "codeql-author"
-                elif review["status"] != "needs_revision":
-                    block_reason = f"unsupported_codeql_review_status:{review['status']}"
+                elif decision != "needs_revision":
+                    block_reason = f"unsupported_codeql_review_status:{decision}"
                     output = state["directory"] / f"codeql-v{state['codeql_version'] + 1}.json"
                     inputs = []
                     role = "codeql-author"
@@ -804,6 +849,7 @@ def run_pattern_stage(
                         state["codeql"],
                         state["reviewed_codeql"],
                         preflight,
+                        *([state["semantic_review"]] if semantic else []),
                         *context_inputs,
                     ]
                 role = "codeql-author"
@@ -813,28 +859,34 @@ def run_pattern_stage(
                 block_reason = "missing_codeql_artifact"
             elif pattern_path is None or not state["rule_plan"].is_file():
                 block_reason = "missing_pattern_or_rule_plan"
-            elif state["reviewed_codeql_version"] == state["codeql_version"]:
+            elif state["reviewed_codeql_version"] != state["codeql_version"]:
+                block_reason = "missing_current_preflight_decision"
+            elif _json(state["reviewed_codeql"])["status"] != "preflight_passed":
+                block_reason = "preflight_failed"
+            elif state["semantic_review_version"] == state["codeql_version"]:
                 skipped += 1
                 continue
             else:
-                output = state["directory"] / f"codeql-v{state['codeql_version']}.reviewed.json"
+                output = state["directory"] / f"semantic-review-v{state['codeql_version']}.json"
                 preflight = _codeql_preflight(repo, state["codeql"])
                 inputs = [
                     pattern_path,
                     state["rule_plan"],
-                    state["codeql"],
+                    state["reviewed_codeql"],
                     preflight,
                     *context_inputs,
                 ]
                 role = "codeql-reviewer"
         elif stage == "codeql-materialize":
-            if state["reviewed_codeql"] is None:
-                block_reason = "missing_reviewed_codeql_artifact"
+            if state["reviewed_codeql"] is None or state["semantic_review"] is None:
+                block_reason = "missing_preflight_or_semantic_review"
             else:
                 artifact = _json(state["reviewed_codeql"])
-                if artifact["status"] != "accepted":
-                    block_reason = f"codeql_not_accepted:{artifact['status']}"
-                    # The next codeql-author run consumes this review and creates a new version.
+                semantic = _validate_semantic_review(
+                    repo, state, state["semantic_review"]
+                )
+                if semantic["status"] != "semantically_accepted":
+                    block_reason = f"codeql_not_semantically_accepted:{semantic['status']}"
                     blocked += 1
                     reasons[block_reason] = reasons.get(block_reason, 0) + 1
                     continue
@@ -846,7 +898,9 @@ def run_pattern_stage(
                 if dry_run:
                     completed += 1
                     continue
-                pack_dir, _ = materialize(repo, state["reviewed_codeql"], repo / "codeql" / "generated")
+                pack_dir, _ = materialize(
+                    repo, state["reviewed_codeql"], repo / "codeql" / "generated"
+                )
                 verification = verify_pack(repo, pack_dir)
                 gate = verification["gate"]
                 if not gate["compiled"] or not gate["qltests_passed"]:
@@ -874,6 +928,13 @@ def run_pattern_stage(
         split_path,
         workers,
     )
+    if stage == "codeql-review" and not dry_run:
+        for _, _, output in pending_roles:
+            if output.is_file():
+                matching_group = next(
+                    path for path in groups if _group_state(repo, path)["directory"] == output.parent
+                )
+                _validate_semantic_review(repo, _group_state(repo, matching_group), output)
     return {
         "stage": stage,
         "pattern_groups": len(groups),
@@ -895,13 +956,25 @@ def campaign_status(repo: Path, campaign: dict[str, Any], partition: str) -> dic
 
     def verified(state: dict[str, Any]) -> bool:
         artifact_path = state["reviewed_codeql"]
-        if artifact_path is None or not artifact_path.is_file():
+        semantic_path = state["semantic_review"]
+        if (
+            artifact_path is None
+            or semantic_path is None
+            or not artifact_path.is_file()
+            or state["reviewed_codeql_version"] != state["codeql_version"]
+            or state["semantic_review_version"] != state["codeql_version"]
+        ):
             return False
         artifact = _json(artifact_path)
+        semantic = _validate_semantic_review(repo, state, semantic_path)
+        if semantic["status"] != "semantically_accepted":
+            return False
+        proposed = state["codeql"]
         verification = (
             repo
-            / "codeql"
-            / "generated"
+            / "analysis"
+            / "codeql-preflight"
+            / sha256_file(proposed)
             / artifact["pattern_id"]
             / f"v{artifact['artifact_version']}"
             / "verification.json"
@@ -931,10 +1004,11 @@ def campaign_status(repo: Path, campaign: dict[str, Any], partition: str) -> dic
             "pattern_reviewed": sum(state["reviewed_pattern"].is_file() for state in group_states),
             "rule_planned": sum(state["rule_plan"].is_file() for state in group_states),
             "codeql_authored": sum(state["codeql"] is not None for state in group_states),
-            "codeql_reviewed": sum(state["reviewed_codeql"] is not None for state in group_states),
-            "codeql_compile_qltest_passed": sum(verified(state) for state in group_states),
+            "codeql_preflight_decided": sum(state["reviewed_codeql"] is not None for state in group_states),
+            "codeql_semantic_reviewed": sum(state["semantic_review"] is not None for state in group_states),
+            "codeql_scan_eligible": sum(verified(state) for state in group_states),
         },
-        "runtime_note": "downstream scan/runtime/adjudication are admitted only after CodeQL compile and qltest gates",
+        "runtime_note": "runtime/adjudication remain pending after static scan preparation",
     }
 
 
@@ -946,11 +1020,11 @@ def main() -> None:
     init.add_argument("--campaign-id", required=True)
     status = sub.add_parser("status")
     status.add_argument("--campaign-id", required=True)
-    status.add_argument("--partition", choices=("development", "validation", "sealed_holdout"), default="development")
+    status.add_argument("--partition", choices=("development", "validation"), default="development")
     run = sub.add_parser("run")
     run.add_argument("--campaign-id", required=True)
     run.add_argument("--stage", choices=STAGES, required=True)
-    run.add_argument("--partition", choices=("development", "validation", "sealed_holdout"), default="development")
+    run.add_argument("--partition", choices=("development", "validation"), default="development")
     run.add_argument("--max-jobs", type=int, default=1)
     run.add_argument(
         "--workers",

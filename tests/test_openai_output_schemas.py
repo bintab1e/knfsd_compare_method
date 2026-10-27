@@ -15,6 +15,7 @@ OUTPUT_SCHEMAS = [
     "verdict.schema.json",
     "codeql-artifact.schema.json",
     "fast-codeql-bundle.schema.json",
+    "semantic-review.schema.json",
 ]
 
 

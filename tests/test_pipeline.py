@@ -123,6 +123,7 @@ def test_group_state_selects_latest_codeql_revision(tmp_path: Path) -> None:
         "codeql-v1.reviewed.json",
         "codeql-v2.json",
         "codeql-v2.json.audit.json",
+        "semantic-review-v1.json",
     ):
         (directory / name).write_text("{}", encoding="utf-8")
     state = _group_state(tmp_path, group)
@@ -130,6 +131,8 @@ def test_group_state_selects_latest_codeql_revision(tmp_path: Path) -> None:
     assert state["codeql_version"] == 2
     assert state["reviewed_codeql"].name == "codeql-v1.reviewed.json"
     assert state["reviewed_codeql_version"] == 1
+    assert state["semantic_review"].name == "semantic-review-v1.json"
+    assert state["semantic_review_version"] == 1
 
 
 def test_role_batch_respects_worker_bound(monkeypatch, tmp_path: Path) -> None:
@@ -189,7 +192,7 @@ def test_fast_bundle_derives_plan_and_artifact(tmp_path: Path) -> None:
     assert json.loads((directory / "codeql-v1.json").read_text(encoding="utf-8"))["status"] == "proposed"
 
 
-def test_fast_gate_accepts_only_deterministic_pass(monkeypatch, tmp_path: Path) -> None:
+def test_fast_gate_only_marks_preflight_passed(monkeypatch, tmp_path: Path) -> None:
     source_root = Path(__file__).resolve().parents[1]
     (tmp_path / "schemas").mkdir()
     (tmp_path / "schemas/codeql-artifact.schema.json").write_text(
@@ -205,13 +208,50 @@ def test_fast_gate_accepts_only_deterministic_pass(monkeypatch, tmp_path: Path) 
         json.dumps({"gate": {"compiled": True, "qltests_passed": True}}), encoding="utf-8"
     )
     monkeypatch.setattr(pipeline, "_codeql_preflight", lambda repo, artifact: verification)
-    monkeypatch.setattr(pipeline, "materialize", lambda repo, artifact, root: (tmp_path / "pack", {}))
-    monkeypatch.setattr(
-        pipeline,
-        "verify_pack",
-        lambda repo, pack: {"gate": {"compiled": True, "qltests_passed": True}},
-    )
     state = {"directory": directory, "codeql": artifact_path, "codeql_version": 1}
-    assert pipeline._fast_gate_artifact(tmp_path, state, False) == "accepted"
+    assert pipeline._fast_gate_artifact(tmp_path, state, False) == "preflight_passed"
     reviewed = json.loads((directory / "codeql-v1.reviewed.json").read_text(encoding="utf-8"))
-    assert reviewed["status"] == "accepted"
+    assert reviewed["status"] == "preflight_passed"
+
+
+def test_semantic_acceptance_requires_all_independent_checks(tmp_path: Path) -> None:
+    source_root = Path(__file__).resolve().parents[1]
+    (tmp_path / "schemas").mkdir()
+    (tmp_path / "schemas/semantic-review.schema.json").write_text(
+        (source_root / "schemas/semantic-review.schema.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    directory = tmp_path / "patterns/groups/GROUP-TEST"
+    directory.mkdir(parents=True)
+    gate = directory / "codeql-v1.reviewed.json"
+    artifact = _fast_artifact("preflight_passed")
+    gate.write_text(json.dumps(artifact), encoding="utf-8")
+    review = directory / "semantic-review-v1.json"
+    review.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "pattern_id": artifact["pattern_id"],
+                "artifact_version": 1,
+                "artifact_sha256": pipeline.sha256_file(gate),
+                "status": "semantically_accepted",
+                "risk_tier": "standard",
+                "remote_scope_verified": True,
+                "invariant_implemented": True,
+                "guards_verified": False,
+                "realistic_tests": True,
+                "findings": [],
+                "review_notes": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    state = {
+        "reviewed_codeql": gate,
+        "reviewed_codeql_version": 1,
+        "codeql_version": 1,
+    }
+    import pytest
+
+    with pytest.raises(ValueError, match="every semantic check"):
+        pipeline._validate_semantic_review(tmp_path, state, review)

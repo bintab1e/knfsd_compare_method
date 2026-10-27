@@ -7,7 +7,7 @@ import pytest
 from compare_method.codeql_artifact import _run, materialize, validate_artifact
 
 
-def _artifact(status: str = "accepted") -> dict:
+def _artifact(status: str = "preflight_passed") -> dict:
     query_path = "queries/Test.ql"
     positive = "tests/test/positive.cpp"
     negative = "tests/test/negative.cpp"
@@ -69,11 +69,11 @@ def test_materialize_refuses_path_traversal(tmp_path: Path) -> None:
 
 def test_proposed_requires_explicit_override(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
-    with pytest.raises(ValueError, match="not accepted"):
+    with pytest.raises(ValueError, match="not preflight_passed"):
         validate_artifact(repo, _artifact("proposed"))
     validate_artifact(repo, _artifact("proposed"), allow_proposed=True)
     validate_artifact(repo, _artifact("needs_revision"), allow_proposed=True)
-    with pytest.raises(ValueError, match="not accepted"):
+    with pytest.raises(ValueError, match="not preflight_passed"):
         validate_artifact(repo, _artifact("rejected"), allow_proposed=True)
 
 

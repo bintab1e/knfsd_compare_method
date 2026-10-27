@@ -37,6 +37,7 @@ compare-runtime-dispatch = "compare_method.runtime_dispatch:main"
 compare-round-pipeline = "compare_method.round_pipeline:main"
 compare-batch-scan = "compare_method.batch_scan:main"
 compare-campaign-driver = "compare_method.campaign_driver:main"
+compare-static-preparation-driver = "compare_method.campaign_driver:main"
 compare-fetch-evidence = "compare_method.evidence_fetch:main"
 
 [tool.setuptools.packages.find]

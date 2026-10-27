@@ -10,7 +10,7 @@
     "pattern_ir_version": {"type": "integer", "minimum": 1},
     "rule_plan_version": {"type": "integer", "minimum": 1},
     "artifact_version": {"type": "integer", "minimum": 1},
-    "status": {"enum": ["proposed", "accepted", "needs_revision", "rejected"]},
+    "status": {"enum": ["proposed", "preflight_passed", "needs_revision", "rejected"]},
     "pack": {
       "type": "object",
       "additionalProperties": false,

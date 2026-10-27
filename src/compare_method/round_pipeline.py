@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from jsonschema import Draft202012Validator
 
 from .adjudication_bundle import build_bundles
 from .candidate import normalize_sarif
@@ -37,6 +38,7 @@ def init_round(
     rule_plan: Path,
     codeql_artifact: Path,
     context_paths: list[Path],
+    semantic_review: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     pattern = _json(pattern_ir)
     artifact = _json(codeql_artifact)
@@ -45,20 +47,37 @@ def init_round(
     pattern_id = pattern["pattern_id"]
     directory = repo / "campaigns" / campaign_id / "patterns" / pattern_id / f"round-{round_number}"
     manifest_path = directory / "manifest.json"
+    inputs = {
+        "pattern_ir": _bound(pattern_ir),
+        "rule_plan": _bound(rule_plan),
+        "codeql_artifact": _bound(codeql_artifact),
+        "semantic_review": _bound(semantic_review) if semantic_review else None,
+        "contexts": [
+            _bound(path)
+            for path in sorted(context_paths, key=lambda item: str(item.resolve()))
+        ],
+    }
     if manifest_path.exists():
-        return manifest_path, _json(manifest_path)
+        existing = _json(manifest_path)
+        identity = {
+            "campaign_id": campaign_id,
+            "pattern_id": pattern_id,
+            "round": round_number,
+            "inputs": inputs,
+        }
+        actual = {key: existing.get(key) for key in identity}
+        if actual != identity:
+            raise ValueError(
+                f"existing round manifest input binding differs: {manifest_path}"
+            )
+        return manifest_path, existing
     manifest = {
         "schema_version": "1.0.0",
         "campaign_id": campaign_id,
         "pattern_id": pattern_id,
         "round": round_number,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "inputs": {
-            "pattern_ir": _bound(pattern_ir),
-            "rule_plan": _bound(rule_plan),
-            "codeql_artifact": _bound(codeql_artifact),
-            "contexts": [_bound(path) for path in context_paths],
-        },
+        "inputs": inputs,
         "status": "active",
     }
     write_json(manifest_path, manifest)
@@ -124,6 +143,32 @@ def scan(repo: Path, manifest_path: Path) -> dict[str, Any]:
     paths = _paths(repo, manifest_path, manifest)
     artifact_path = _resolve(repo, manifest["inputs"]["codeql_artifact"])
     artifact = _json(artifact_path)
+    semantic_binding = manifest["inputs"].get("semantic_review")
+    if semantic_binding is None:
+        raise ValueError("round scan requires an independent semantic review binding")
+    semantic_path = _resolve(repo, semantic_binding)
+    semantic = _json(semantic_path)
+    Draft202012Validator(
+        _json(repo / "schemas" / "semantic-review.schema.json")
+    ).validate(semantic)
+    if artifact.get("status") != "preflight_passed":
+        raise ValueError("round scan requires a preflight_passed CodeQL artifact")
+    if (
+        semantic["status"] != "semantically_accepted"
+        or not all(
+            semantic[name]
+            for name in (
+                "remote_scope_verified",
+                "invariant_implemented",
+                "guards_verified",
+                "realistic_tests",
+            )
+        )
+        or semantic["pattern_id"] != artifact["pattern_id"]
+        or semantic["artifact_version"] != artifact["artifact_version"]
+        or semantic["artifact_sha256"] != sha256_file(artifact_path)
+    ):
+        raise ValueError("round scan semantic review does not accept the bound artifact")
     pack_dir, _ = materialize(repo, artifact_path, repo / "codeql" / "generated")
     codeql = yaml.safe_load((repo / "config" / "codeql.yaml").read_text(encoding="utf-8"))
     database = repo / codeql["database"]["path"]
@@ -310,6 +355,7 @@ def main() -> None:
     init.add_argument("--pattern-ir", type=Path, required=True)
     init.add_argument("--rule-plan", type=Path, required=True)
     init.add_argument("--codeql-artifact", type=Path, required=True)
+    init.add_argument("--semantic-review", type=Path)
     init.add_argument("--context", type=Path, action="append", default=[])
     for name in ("status", "scan", "normalize", "close"):
         command = sub.add_parser(name)
@@ -342,6 +388,7 @@ def main() -> None:
             args.rule_plan.resolve(),
             args.codeql_artifact.resolve(),
             [path.resolve() for path in args.context],
+            args.semantic_review.resolve() if args.semantic_review else None,
         )
         result = {"manifest": str(path), **manifest}
     else:

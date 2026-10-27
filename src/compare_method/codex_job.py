@@ -24,7 +24,7 @@ ROLE_SCHEMAS = {
     "rule-planner": "rule-plan.schema.json",
     "codeql-author": "codeql-artifact.schema.json",
     "codeql-fast-author": "fast-codeql-bundle.schema.json",
-    "codeql-reviewer": "codeql-artifact.schema.json",
+    "codeql-reviewer": "semantic-review.schema.json",
     "reachability-planner": "validation-job.v2.schema.json",
     "adjudicator": "verdict.schema.json",
     "refiner": "pattern-ir.schema.json",

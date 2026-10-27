@@ -9,6 +9,8 @@ scan:
   ram_mb: 4096
   timeout_seconds: 900
   batch_timeout_seconds: 7200
+  batch_chunk_timeout_seconds: 1800
+  batch_size: 16
 database:
   path: codeql-db/linux-v7.3-vanilla-v4
   source_root: kernel/linux-v7.3

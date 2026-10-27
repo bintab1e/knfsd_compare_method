@@ -73,17 +73,19 @@ Run a stage in bounded, resumable batches. Fact-only extraction is blocked by de
   --stage extraction --partition development --max-jobs 10
 ```
 
-The default fast path is `pattern`, `codeql-fast-author`, and `codeql-fast-gate`. The fast author emits the plan, query, and qltests together; the gate compiles and tests deterministically. Only failures enter bounded `codeql-author` repair. Legacy `pattern-review`, `rule-plan`, and `codeql-review` remain available for explicit escalation. Every LLM call goes through `compare-codex-job`, uses a fresh ephemeral Daybreak Blue session, validates structured output, and records input/prompt/schema hashes.
+The default fast path is `pattern`, `codeql-fast-author`, `codeql-fast-gate`, and `codeql-review`. The fast author emits the plan, query, and qltests together. Compile and qltest produce only `preflight_passed`; an independent semantic decision verifies remote KNFSd scope, the transferred invariant, guards/barriers, and realistic controls before a rule becomes scan-eligible. Only failed rules enter bounded `codeql-author` repair. Every LLM call goes through `compare-codex-job`, uses a fresh ephemeral Daybreak Blue session, validates structured output, and records input/prompt/schema hashes.
 
-Run the complete resumable fast path with:
+Run static preparation with:
 
 ```bash
-.venv/bin/compare-campaign-driver --repo . \
+.venv/bin/compare-static-preparation-driver --repo . \
   --campaign-id CAMPAIGN-KNFSD-V73-001 \
   --workers 8 --pattern-workers 4 --max-repair-rounds 3 --round 1
 ```
 
-Accepted queries are scanned in one CodeQL invocation and then split back into independent per-pattern SARIF and candidate directories.
+Semantically accepted queries are scanned in content-addressed batches of at most 16. A failed batch is bisected until only the failing query is quarantined; successful chunks and their per-pattern SARIF/candidates are preserved. This driver stops at `STATIC_SCAN_COMPLETE` (or `STATIC_SCAN_COMPLETE_WITH_QUARANTINE`): runtime validation, adjudication, and promotion remain explicitly pending.
+
+The ordinary driver cannot open Sealed Holdout. A trusted external evaluator may release a numeric aggregate once at an explicit milestone with `--milestone-holdout`, the public commitment, and exact confirmation; case IDs and per-case results are rejected.
 
 ## Pattern rounds
 
@@ -95,6 +97,7 @@ Each pattern has an independent round manifest and sequence:
   --pattern-ir patterns/.../v1.reviewed.json \
   --rule-plan patterns/.../rule-plan-v1.json \
   --codeql-artifact patterns/.../codeql-v1.reviewed.json \
+  --semantic-review patterns/.../semantic-review-v1.json \
   --context target-map/context/.../v1.json
 ```
 
@@ -122,7 +125,7 @@ The initial Ganesha CVE-2017-8779 transfer pattern has already traversed extract
 2. Extract and independently review each case's causal model.
 3. Map supported remote NFS/RPC semantics to vanilla KNFSd `v7.3`; exclude non-applicable cases from active analysis without deleting them.
 4. Build versioned Pattern IR; reserve independent Pattern IR review for exceptions.
-5. Generate each rule plan, query, and qltests together; deterministically gate them, repair only failures, and batch-scan the full kernel database once.
+5. Generate each rule plan, query, and qltests together; run deterministic preflight plus independent semantic review, repair only failures, and scan the full kernel database in isolated content-addressed batches.
 6. Prove candidate remote reachability and validate KASAN/KCSAN jobs in the knfsd-syzkaller-compatible QEMU environment.
 7. Adjudicate intended-pattern match, bug reality, and security relevance separately.
 8. Close each pattern's round, apply the false-positive circuit breaker, and refine without sealed-holdout feedback.
