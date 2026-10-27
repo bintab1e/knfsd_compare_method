@@ -183,14 +183,27 @@ def drive_fast_patterns(
         before = group_metrics(repo, campaign)
         if before["codeql"] >= before["groups"]:
             break
-        pipeline.run_pattern_stage(
-            repo,
-            campaign,
-            "codeql-fast-author",
-            author_batch_size,
-            False,
-            workers=pattern_workers,
-        )
+        try:
+            pipeline.run_pattern_stage(
+                repo,
+                campaign,
+                "codeql-fast-author",
+                author_batch_size,
+                False,
+                workers=pattern_workers,
+            )
+        except RuntimeError as exc:
+            # A parallel Codex batch can contain both successful artifacts and
+            # one transiently failed response (for example max_output_tokens).
+            # Preserve the successful outputs and let the next bounded batch
+            # retry only the still-missing artifacts instead of aborting the
+            # entire campaign.
+            emit(
+                "fast_author_batch_partial_failure",
+                batch_number=batch_number,
+                batch_size=author_batch_size,
+                error=str(exc),
+            )
         pipeline.run_pattern_stage(
             repo, campaign, "codeql-fast-gate", before["groups"], False, workers=1
         )

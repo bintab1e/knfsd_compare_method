@@ -58,6 +58,109 @@ def test_case_stage_rejects_sealed_holdout_before_selection(tmp_path: Path) -> N
         )
 
 
+def test_fast_author_partial_failure_preserves_progress_and_retries(
+    monkeypatch, tmp_path: Path
+) -> None:
+    metrics = [
+        {
+            "groups": 2,
+            "patterns": 2,
+            "fast_bundles": 0,
+            "rule_plans": 0,
+            "codeql": 0,
+            "preflight_passed": 0,
+            "semantically_accepted": 0,
+            "needs_revision": 0,
+            "rejected": 0,
+        },
+        {
+            "groups": 2,
+            "patterns": 2,
+            "fast_bundles": 0,
+            "rule_plans": 0,
+            "codeql": 0,
+            "preflight_passed": 0,
+            "semantically_accepted": 0,
+            "needs_revision": 0,
+            "rejected": 0,
+        },
+        {
+            "groups": 2,
+            "patterns": 2,
+            "fast_bundles": 1,
+            "rule_plans": 0,
+            "codeql": 0,
+            "preflight_passed": 0,
+            "semantically_accepted": 0,
+            "needs_revision": 0,
+            "rejected": 0,
+        },
+        {
+            "groups": 2,
+            "patterns": 2,
+            "fast_bundles": 1,
+            "rule_plans": 0,
+            "codeql": 0,
+            "preflight_passed": 0,
+            "semantically_accepted": 0,
+            "needs_revision": 0,
+            "rejected": 0,
+        },
+        {
+            "groups": 2,
+            "patterns": 2,
+            "fast_bundles": 2,
+            "rule_plans": 2,
+            "codeql": 2,
+            "preflight_passed": 2,
+            "semantically_accepted": 2,
+            "needs_revision": 0,
+            "rejected": 0,
+        },
+        {
+            "groups": 2,
+            "patterns": 2,
+            "fast_bundles": 2,
+            "rule_plans": 2,
+            "codeql": 2,
+            "preflight_passed": 2,
+            "semantically_accepted": 2,
+            "needs_revision": 0,
+            "rejected": 0,
+        },
+        {
+            "groups": 2,
+            "patterns": 2,
+            "fast_bundles": 2,
+            "rule_plans": 2,
+            "codeql": 2,
+            "preflight_passed": 2,
+            "semantically_accepted": 2,
+            "needs_revision": 0,
+            "rejected": 0,
+        },
+    ]
+    calls: list[str] = []
+
+    def fake_metrics(*args):
+        if len(metrics) > 1:
+            return metrics.pop(0)
+        return metrics[0]
+
+    def fake_stage(repo, campaign, stage, max_jobs, dry_run, workers=1):
+        calls.append(stage)
+        if stage == "codeql-fast-author" and calls.count(stage) == 1:
+            raise RuntimeError("transient author failure")
+        return {}
+
+    monkeypatch.setattr(driver, "group_metrics", fake_metrics)
+    monkeypatch.setattr(driver.pipeline, "run_pattern_stage", fake_stage)
+    result = driver.drive_fast_patterns(tmp_path, {}, 1, 1)
+
+    assert calls.count("codeql-fast-author") == 2
+    assert result["semantically_accepted"] == 2
+
+
 def test_holdout_release_is_aggregate_only_and_one_time(tmp_path: Path) -> None:
     source_root = Path(__file__).resolve().parents[1]
     (tmp_path / "schemas").mkdir()
