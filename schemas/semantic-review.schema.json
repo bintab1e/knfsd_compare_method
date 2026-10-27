@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "pattern_id", "artifact_version", "artifact_sha256", "status", "risk_tier", "remote_scope_verified", "invariant_implemented", "guards_verified", "realistic_tests", "findings", "review_notes"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"type": "string", "const": "1.0.0"},
     "pattern_id": {"type": "string", "pattern": "^PATTERN-[A-Z0-9-]+$"},
     "artifact_version": {"type": "integer", "minimum": 1},
     "artifact_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},

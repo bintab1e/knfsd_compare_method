@@ -5,7 +5,7 @@
   "required": ["candidate_id", "kernel_ref", "sanitizer", "remote_trigger", "target_functions", "target_pcs", "required_configuration", "required_capabilities", "execution", "success_conditions"],
   "properties": {
     "candidate_id": {"type": "string"},
-    "kernel_ref": {"const": "v7.3"},
+    "kernel_ref": {"type": "string", "const": "v7.3"},
     "sanitizer": {"enum": ["kasan", "kcsan"]},
     "remote_trigger": {
       "type": "object",

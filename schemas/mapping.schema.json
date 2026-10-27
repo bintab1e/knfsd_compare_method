@@ -7,7 +7,7 @@
   "properties": {
     "mapping_id": {"type": "string"},
     "case_id": {"type": "string"},
-    "target": {"const": "linux-knfsd-v7.3"},
+    "target": {"type": "string", "const": "linux-knfsd-v7.3"},
     "status": {"enum": ["direct", "semantic", "conditional", "not_applicable", "insufficient_evidence", "invalid_target"]},
     "target_semantics": {
       "type": "object",

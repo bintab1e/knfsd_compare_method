@@ -8,7 +8,7 @@
     "review_id": {"type": "string", "pattern": "^MAPREVIEW-"},
     "mapping_id": {"type": "string"},
     "case_id": {"type": "string"},
-    "target": {"const": "linux-knfsd-v7.3"},
+    "target": {"type": "string", "const": "linux-knfsd-v7.3"},
     "review_status": {"enum": ["accepted", "needs_revision", "rejected", "insufficient_evidence"]},
     "applicability_status": {"enum": ["direct", "semantic", "conditional", "not_applicable", "insufficient_evidence", "invalid_target"]},
     "confidence": {"enum": ["high", "medium", "low", "insufficient"]},

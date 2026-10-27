@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "pattern_id", "pattern_ir_version", "rule_plan_version", "artifact_version", "status", "pack", "queries", "tests", "controls", "review_notes"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"type": "string", "const": "1.0.0"},
     "pattern_id": {"type": "string", "pattern": "^PATTERN-[A-Z0-9-]+$"},
     "pattern_ir_version": {"type": "integer", "minimum": 1},
     "rule_plan_version": {"type": "integer", "minimum": 1},

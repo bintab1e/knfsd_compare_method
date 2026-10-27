@@ -19,7 +19,7 @@
     "source_fingerprint_sha256"
   ],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"type": "string", "const": "1.0.0"},
     "case_id": {"type": "string", "pattern": "^CASE-[A-Z0-9]+-(CVE-[0-9]{4}-[0-9]{4,7}|COMMIT-[A-F0-9]{7,64}|UNRESOLVED-[A-F0-9]{12})-RC[0-9]{2}$"},
     "case_group_id": {"type": "string", "pattern": "^GROUP-"},
     "root_cause_index": {"type": "integer", "minimum": 1},

@@ -5,8 +5,8 @@
   "additionalProperties": false,
   "required": ["schema_version", "unit", "seed", "ratios", "target_implementation", "group_counts", "case_counts", "assignments", "external_analogue_case_ids", "source"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
-    "unit": {"const": "root_cause_group"},
+    "schema_version": {"type": "string", "const": "1.0.0"},
+    "unit": {"type": "string", "const": "root_cause_group"},
     "seed": {"type": "integer"},
     "ratios": {
       "type": "object",
@@ -18,7 +18,7 @@
         "sealed_holdout": {"type": "number"}
       }
     },
-    "target_implementation": {"const": "KNFSD"},
+    "target_implementation": {"type": "string", "const": "KNFSD"},
     "group_counts": {"$ref": "#/$defs/counts"},
     "case_counts": {"$ref": "#/$defs/counts"},
     "assignments": {

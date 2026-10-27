@@ -5,18 +5,18 @@
   "additionalProperties": false,
   "required": ["schema_version", "campaign_id", "target", "created_at", "split", "llm", "status"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"type": "string", "const": "1.0.0"},
     "campaign_id": {"type": "string", "pattern": "^CAMPAIGN-[A-Z0-9-]+$"},
     "target": {
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "kernel_ref", "kernel_commit", "protocols", "remote_entry_only"],
       "properties": {
-        "name": {"const": "linux-knfsd"},
-        "kernel_ref": {"const": "v7.3"},
-        "kernel_commit": {"const": "c03c1a14507dfaf8b856c2608f9ac216021fc222"},
+        "name": {"type": "string", "const": "linux-knfsd"},
+        "kernel_ref": {"type": "string", "const": "v7.3"},
+        "kernel_commit": {"type": "string", "const": "c03c1a14507dfaf8b856c2608f9ac216021fc222"},
         "protocols": {"type": "array", "items": {"enum": ["nfs3", "nfs4.0", "nfs4.1", "nfs4.2"]}},
-        "remote_entry_only": {"const": true}
+        "remote_entry_only": {"type": "boolean", "const": true}
       }
     },
     "created_at": {"type": "string"},
@@ -36,9 +36,9 @@
       "additionalProperties": false,
       "required": ["model", "reasoning_effort", "cyber_access_program"],
       "properties": {
-        "model": {"const": "gpt-5.6-sol"},
-        "reasoning_effort": {"const": "xhigh"},
-        "cyber_access_program": {"const": "daybreak_blue"}
+        "model": {"type": "string", "const": "gpt-5.6-sol"},
+        "reasoning_effort": {"type": "string", "const": "xhigh"},
+        "cyber_access_program": {"type": "string", "const": "daybreak_blue"}
       }
     },
     "status": {"enum": ["active", "paused", "complete", "archived"]}

@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "campaign_id", "milestone_id", "evaluated_at", "sealed_holdout_commitment", "metrics"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"type": "string", "const": "1.0.0"},
     "campaign_id": {"type": "string", "pattern": "^CAMPAIGN-[A-Z0-9-]+$"},
     "milestone_id": {"type": "string", "pattern": "^MILESTONE-[A-Z0-9-]+$"},
     "evaluated_at": {"type": "string", "format": "date-time"},

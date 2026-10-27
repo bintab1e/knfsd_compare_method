@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "pattern_id", "baseline_version", "candidate_version", "milestone_holdout_evaluation", "gates", "metrics", "circuit_breaker", "decision", "reasons", "input_hashes"],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"type": "string", "const": "1.0.0"},
     "pattern_id": {"type": "string", "pattern": "^PATTERN-"},
     "baseline_version": {"type": "integer", "minimum": 1},
     "candidate_version": {"type": "integer", "minimum": 1},
