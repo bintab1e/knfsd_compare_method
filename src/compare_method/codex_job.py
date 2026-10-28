@@ -87,6 +87,8 @@ def build_job(role: str, repo: Path, input_paths: list[Path], output: Path) -> d
         command.extend(
             ["--cyber-access-program", config["cyber_access_program"]]
         )
+    if config.get("service_tier"):
+        command.extend(["--config", f"service_tier={config['service_tier']}"])
     command.extend([
         "--model",
         config["model"],
@@ -107,6 +109,7 @@ def build_job(role: str, repo: Path, input_paths: list[Path], output: Path) -> d
     return {
         "config": config,
         "reasoning_effort": reasoning_effort,
+        "service_tier": config.get("service_tier"),
         "prompt_path": prompt_path,
         "schema_path": schema_path,
         "prompt": prompt,
@@ -133,6 +136,7 @@ def run_job(
         "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "model": job["config"]["model"],
         "reasoning_effort": job["reasoning_effort"],
+        "service_tier": job["service_tier"],
         "sandbox": job["config"].get("sandbox", "read-only"),
         "timeout_seconds": int(job["config"].get("timeout_seconds", 3600)),
         "fresh_ephemeral_session": True,

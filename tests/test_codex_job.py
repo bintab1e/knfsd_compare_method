@@ -28,6 +28,31 @@ def test_job_is_ephemeral_structured_and_pinned(tmp_path, monkeypatch):
     assert "Untrusted evidence boundary" in job["prompt"]
 
 
+def test_job_allows_fast_service_tier_without_changing_effort(tmp_path):
+    repo = tmp_path
+    (repo / "config").mkdir()
+    (repo / "prompts").mkdir()
+    (repo / "schemas").mkdir()
+    (repo / "config" / "llm.yaml").write_text(
+        "model: gpt-5.6-sol\n"
+        "reasoning_effort: high\n"
+        "service_tier: fast\n"
+        "sandbox: read-only\n"
+        "executable: codex\n",
+        encoding="utf-8",
+    )
+    (repo / "prompts" / "extractor.md").write_text("extract", encoding="utf-8")
+    (repo / "schemas" / "extraction.schema.json").write_text(
+        json.dumps({"type": "object"}), encoding="utf-8"
+    )
+    evidence = repo / "case.json"
+    evidence.write_text("{}", encoding="utf-8")
+    job = build_job("extractor", repo, [evidence], repo / "out.json")
+    assert job["reasoning_effort"] == "high"
+    assert "model_reasoning_effort=high" in job["command"]
+    assert "service_tier=fast" in job["command"]
+
+
 def test_job_allows_explicit_per_role_reasoning_effort(tmp_path):
     repo = tmp_path
     (repo / "config").mkdir()
