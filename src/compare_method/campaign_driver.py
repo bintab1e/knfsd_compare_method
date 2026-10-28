@@ -68,6 +68,7 @@ def group_metrics(repo: Path, campaign: dict[str, Any]) -> dict[str, int]:
         for path in pipeline.build_pattern_groups(repo, campaign)
     ]
     preflight_passed = semantically_accepted = needs_revision = rejected = 0
+    preflight_needs_revision = semantic_needs_revision = scan_eligible = blocking_revision = 0
     for state in states:
         reviewed = state["reviewed_codeql"]
         if reviewed is None:
@@ -76,13 +77,18 @@ def group_metrics(repo: Path, campaign: dict[str, Any]) -> dict[str, int]:
         status = artifact["status"]
         preflight_passed += status == "preflight_passed"
         needs_revision += status == "needs_revision"
+        preflight_needs_revision += status == "needs_revision"
         rejected += status == "rejected"
         semantic_path = state["semantic_review"]
         if semantic_path and state["semantic_review_version"] == state["codeql_version"]:
             semantic = pipeline._validate_semantic_review(repo, state, semantic_path)
             semantically_accepted += semantic["status"] == "semantically_accepted"
             needs_revision += semantic["status"] == "needs_revision"
+            semantic_needs_revision += semantic["status"] == "needs_revision"
             rejected += semantic["status"] == "rejected"
+            admission = pipeline.semantic_scan_admission(semantic)
+            scan_eligible += admission is not None
+            blocking_revision += semantic["status"] == "needs_revision" and admission is None
     return {
         "groups": len(states),
         "patterns": sum(state["pattern"].is_file() for state in states),
@@ -91,7 +97,11 @@ def group_metrics(repo: Path, campaign: dict[str, Any]) -> dict[str, int]:
         "codeql": sum(state["codeql"] is not None for state in states),
         "preflight_passed": preflight_passed,
         "semantically_accepted": semantically_accepted,
+        "scan_eligible": scan_eligible,
         "needs_revision": needs_revision,
+        "preflight_needs_revision": preflight_needs_revision,
+        "semantic_needs_revision": semantic_needs_revision,
+        "blocking_revision": preflight_needs_revision + blocking_revision,
         "rejected": rejected,
     }
 
@@ -242,7 +252,7 @@ def drive_fast_patterns(
     )
     for repair_round in range(1, max_repair_rounds + 1):
         before = group_metrics(repo, campaign)
-        if before["needs_revision"] == 0:
+        if before.get("blocking_revision", before["needs_revision"]) == 0:
             break
         emit("conditional_repair_started", repair_round=repair_round, metrics=before)
         pipeline.run_pattern_stage(
@@ -264,10 +274,17 @@ def drive_fast_patterns(
         if after == before:
             break
     metrics = group_metrics(repo, campaign)
+    preflight_blocking = metrics.get("preflight_needs_revision", 0)
+    all_blocking = metrics.get("blocking_revision", metrics["needs_revision"])
     emit(
         "fast_pattern_pipeline_finished",
         metrics=metrics,
-        quarantined_after_review=metrics["needs_revision"] + metrics["rejected"],
+        advisory_semantic_findings=max(
+            0,
+            metrics.get("semantic_needs_revision", 0)
+            - (all_blocking - preflight_blocking),
+        ),
+        quarantined_after_review=all_blocking + metrics["rejected"],
     )
     return metrics
 
@@ -287,8 +304,8 @@ def run_campaign(
     campaign = _campaign(repo, campaign_id)
     drive_case_partition(repo, campaign, "development", workers)
     pattern_metrics = drive_fast_patterns(repo, campaign, pattern_workers, max_repair_rounds)
-    if pattern_metrics["semantically_accepted"] == 0:
-        raise RuntimeError("no rules passed independent semantic review")
+    if pattern_metrics["scan_eligible"] == 0:
+        raise RuntimeError("no rules passed preflight with verified remote KNFSD scope")
     batch = run_batch_scan(repo, campaign_id, round_number, normalize=True)
     emit(
         "batch_scan_finished",

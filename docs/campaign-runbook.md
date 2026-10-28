@@ -80,7 +80,10 @@ The legacy `pattern-review` and separate `rule-plan` stages remain available
 for an explicitly escalated investigation. Independent `codeql-review` is a
 required default gate.
 
-After all gates and bounded repairs, scan the semantically accepted queries:
+After deterministic gates and bounded repairs of blocking failures, scan the
+preflight-passing queries whose remote KNFSD scope is verified. Semantic
+`needs_revision` findings remain visible as `exploratory_preflight` admission;
+they do not block this scan and do not confer promotion approval:
 
 ```bash
 .venv/bin/compare-batch-scan --repo . \

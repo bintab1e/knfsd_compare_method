@@ -16,6 +16,7 @@ from .codex_job import run_job
 from .common import repo_root, sha256_file, write_json
 from .round_result import build_round_result
 from .runtime_dispatch import run_dispatch
+from .pipeline import semantic_scan_admission
 
 
 def _json(path: Path) -> Any:
@@ -154,21 +155,12 @@ def scan(repo: Path, manifest_path: Path) -> dict[str, Any]:
     if artifact.get("status") != "preflight_passed":
         raise ValueError("round scan requires a preflight_passed CodeQL artifact")
     if (
-        semantic["status"] != "semantically_accepted"
-        or not all(
-            semantic[name]
-            for name in (
-                "remote_scope_verified",
-                "invariant_implemented",
-                "guards_verified",
-                "realistic_tests",
-            )
-        )
+        semantic_scan_admission(semantic) is None
         or semantic["pattern_id"] != artifact["pattern_id"]
         or semantic["artifact_version"] != artifact["artifact_version"]
         or semantic["artifact_sha256"] != sha256_file(artifact_path)
     ):
-        raise ValueError("round scan semantic review does not accept the bound artifact")
+        raise ValueError("round scan semantic review does not admit the bound artifact")
     pack_dir, _ = materialize(repo, artifact_path, repo / "codeql" / "generated")
     codeql = yaml.safe_load((repo / "config" / "codeql.yaml").read_text(encoding="utf-8"))
     database = repo / codeql["database"]["path"]

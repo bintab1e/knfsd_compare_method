@@ -25,7 +25,7 @@ def test_default_driver_never_opens_sealed_holdout(monkeypatch, tmp_path: Path) 
     monkeypatch.setattr(
         driver,
         "drive_fast_patterns",
-        lambda *args: {"semantically_accepted": 1},
+        lambda *args: {"semantically_accepted": 0, "scan_eligible": 1},
     )
     monkeypatch.setattr(
         driver,

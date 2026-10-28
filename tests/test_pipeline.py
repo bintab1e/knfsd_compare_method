@@ -255,3 +255,19 @@ def test_semantic_acceptance_requires_all_independent_checks(tmp_path: Path) -> 
 
     with pytest.raises(ValueError, match="every semantic check"):
         pipeline._validate_semantic_review(tmp_path, state, review)
+
+
+def test_semantic_needs_revision_is_advisory_when_remote_scope_is_verified() -> None:
+    review = {
+        "status": "needs_revision",
+        "remote_scope_verified": True,
+        "invariant_implemented": False,
+        "guards_verified": False,
+        "realistic_tests": False,
+    }
+    assert pipeline.semantic_scan_admission(review) == "exploratory_preflight"
+    review["remote_scope_verified"] = False
+    assert pipeline.semantic_scan_admission(review) is None
+    review["status"] = "rejected"
+    review["remote_scope_verified"] = True
+    assert pipeline.semantic_scan_admission(review) is None

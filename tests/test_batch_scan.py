@@ -68,6 +68,8 @@ def test_batch_input_changes_when_query_changes(tmp_path: Path) -> None:
         "pattern_id": "PATTERN-A",
         "artifact_sha256": "b" * 64,
         "semantic_review_sha256": "c" * 64,
+        "semantic_status": "needs_revision",
+        "scan_admission": "exploratory_preflight",
         "rule_ids": ["rule/a"],
         "queries": [
             {

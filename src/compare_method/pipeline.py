@@ -758,6 +758,21 @@ def _validate_semantic_review(
     return review
 
 
+def semantic_scan_admission(review: dict[str, Any]) -> str | None:
+    """Return the static-scan admission class without implying promotion approval.
+
+    Independent semantic review remains binding evidence, but advisory findings
+    should not prevent an exploratory full-database scan.  A rule is blocked
+    when it is explicitly rejected or when the reviewer could not verify that
+    it is scoped to the remote KNFSd surface.
+    """
+    if review["status"] == "semantically_accepted":
+        return "semantically_accepted"
+    if review["status"] == "needs_revision" and review["remote_scope_verified"]:
+        return "exploratory_preflight"
+    return None
+
+
 def run_pattern_stage(
     repo: Path,
     campaign: dict[str, Any],
@@ -827,7 +842,7 @@ def run_pattern_stage(
                     skipped += 1
                     continue
                 decision = semantic["status"] if semantic else gate["status"]
-                if decision == "semantically_accepted":
+                if semantic is not None and semantic_scan_admission(semantic) is not None:
                     skipped += 1
                     continue
                 if decision == "rejected":
@@ -885,8 +900,9 @@ def run_pattern_stage(
                 semantic = _validate_semantic_review(
                     repo, state, state["semantic_review"]
                 )
-                if semantic["status"] != "semantically_accepted":
-                    block_reason = f"codeql_not_semantically_accepted:{semantic['status']}"
+                admission = semantic_scan_admission(semantic)
+                if admission is None:
+                    block_reason = f"codeql_not_scan_admitted:{semantic['status']}"
                     blocked += 1
                     reasons[block_reason] = reasons.get(block_reason, 0) + 1
                     continue
@@ -967,7 +983,7 @@ def campaign_status(repo: Path, campaign: dict[str, Any], partition: str) -> dic
             return False
         artifact = _json(artifact_path)
         semantic = _validate_semantic_review(repo, state, semantic_path)
-        if semantic["status"] != "semantically_accepted":
+        if semantic_scan_admission(semantic) is None:
             return False
         proposed = state["codeql"]
         verification = (

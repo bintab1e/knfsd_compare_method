@@ -18,12 +18,13 @@ from .pipeline import (
     _pattern_input,
     _validate_semantic_review,
     build_pattern_groups,
+    semantic_scan_admission,
 )
 from .round_pipeline import _paths, init_round
 
 
-def _accepted_records(repo: Path, campaign_id: str, round_number: int) -> list[dict[str, Any]]:
-    """Return only independently reviewed, preflight-passing rules."""
+def _scan_eligible_records(repo: Path, campaign_id: str, round_number: int) -> list[dict[str, Any]]:
+    """Return preflight-passing rules admitted for exploratory static scan."""
     campaign = _json(_campaign_dir(repo, campaign_id) / "manifest.json")
     records: list[dict[str, Any]] = []
     seen_rule_ids: dict[str, str] = {}
@@ -48,7 +49,8 @@ def _accepted_records(repo: Path, campaign_id: str, round_number: int) -> list[d
         semantic = _validate_semantic_review(repo, state, semantic_path)
         if artifact["status"] != "preflight_passed":
             continue
-        if semantic["status"] != "semantically_accepted":
+        scan_admission = semantic_scan_admission(semantic)
+        if scan_admission is None:
             continue
         pack_dir = (
             repo
@@ -107,6 +109,8 @@ def _accepted_records(repo: Path, campaign_id: str, round_number: int) -> list[d
                 "artifact_sha256": sha256_file(artifact_path),
                 "semantic_review_path": semantic_path,
                 "semantic_review_sha256": sha256_file(semantic_path),
+                "semantic_status": semantic["status"],
+                "scan_admission": scan_admission,
                 "pack_dir": pack_dir,
                 "queries": queries,
                 "rule_ids": sorted(set(rule_ids)),
@@ -161,6 +165,8 @@ def _input_payload(
                     "pattern_id": record["pattern_id"],
                     "artifact_sha256": record["artifact_sha256"],
                     "semantic_review_sha256": record["semantic_review_sha256"],
+                    "semantic_status": record["semantic_status"],
+                    "scan_admission": record["scan_admission"],
                     "rule_ids": record["rule_ids"],
                 }
                 for record in records
@@ -379,9 +385,9 @@ def run_batch_scan(
     round_number: int,
     normalize: bool = True,
 ) -> dict[str, Any]:
-    records = _accepted_records(repo, campaign_id, round_number)
+    records = _scan_eligible_records(repo, campaign_id, round_number)
     if not records:
-        raise ValueError("no semantically accepted, preflight-passing CodeQL rules are ready")
+        raise ValueError("no preflight-passing, remote-scope-verified CodeQL rules are ready")
     config = yaml.safe_load((repo / "config" / "codeql.yaml").read_text(encoding="utf-8"))
     executable = repo / config["bundle"]["local_path"]
     if executable.is_dir():
@@ -487,6 +493,8 @@ def run_batch_scan(
                 "artifact_sha256": record["artifact_sha256"],
                 "semantic_review_path": str(record["semantic_review_path"]),
                 "semantic_review_sha256": record["semantic_review_sha256"],
+                "semantic_status": record["semantic_status"],
+                "scan_admission": record["scan_admission"],
                 "rule_ids": record["rule_ids"],
                 "quarantined_rule_ids": sorted(
                     set(record["rule_ids"]) & quarantined_rules
@@ -506,7 +514,7 @@ def run_batch_scan(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Scan semantically accepted KNFSd rules in isolated, content-addressed batches."
+        description="Scan preflight-passing, remote-scope-verified KNFSd rules in isolated batches."
     )
     parser.add_argument("--repo", type=Path, default=repo_root())
     parser.add_argument("--campaign-id", required=True)

@@ -73,7 +73,7 @@ Run a stage in bounded, resumable batches. Fact-only extraction is blocked by de
   --stage extraction --partition development --max-jobs 10
 ```
 
-The default fast path is `pattern`, `codeql-fast-author`, `codeql-fast-gate`, and `codeql-review`. The fast author emits the plan, query, and qltests together. Compile and qltest produce only `preflight_passed`; an independent semantic decision verifies remote KNFSd scope, the transferred invariant, guards/barriers, and realistic controls before a rule becomes scan-eligible. Only failed rules enter bounded `codeql-author` repair. Every LLM call goes through `compare-codex-job`, uses a fresh ephemeral Daybreak Blue session, validates structured output, and records input/prompt/schema hashes.
+The default fast path is `pattern`, `codeql-fast-author`, `codeql-fast-gate`, and `codeql-review`. The fast author emits the plan, query, and qltests together. Compile and qltest produce only `preflight_passed`; an independent semantic decision verifies remote KNFSd scope and records invariant, guard/barrier, and test-quality findings. `needs_revision` is advisory for the exploratory database scan when remote scope is verified, while rejected or scope-unverified rules stay quarantined. Deterministic preflight failures and blocking scope findings alone enter bounded pre-scan repair. Every LLM call goes through `compare-codex-job`, uses a fresh ephemeral Daybreak Blue session, validates structured output, and records input/prompt/schema hashes.
 
 Run static preparation with:
 
@@ -83,7 +83,7 @@ Run static preparation with:
   --workers 8 --pattern-workers 4 --max-repair-rounds 3 --round 1
 ```
 
-Semantically accepted queries are scanned in content-addressed batches of at most 16. A failed batch is bisected until only the failing query is quarantined; successful chunks and their per-pattern SARIF/candidates are preserved. This driver stops at `STATIC_SCAN_COMPLETE` (or `STATIC_SCAN_COMPLETE_WITH_QUARANTINE`): runtime validation, adjudication, and promotion remain explicitly pending.
+Preflight-passing, remote-scope-verified queries are scanned in content-addressed batches of at most 16. Manifests distinguish `semantically_accepted` from `exploratory_preflight`; advisory admission never implies promotion approval. A failed batch is bisected until only the failing query is quarantined; successful chunks and their per-pattern SARIF/candidates are preserved. This driver stops at `STATIC_SCAN_COMPLETE` (or `STATIC_SCAN_COMPLETE_WITH_QUARANTINE`): runtime validation, adjudication, and promotion remain explicitly pending. Final promotion remains strict and requires the independent semantic and runtime evidence gates.
 
 The ordinary driver cannot open Sealed Holdout. A trusted external evaluator may release a numeric aggregate once at an explicit milestone with `--milestone-holdout`, the public commitment, and exact confirmation; case IDs and per-case results are rejected.
 
