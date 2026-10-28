@@ -767,7 +767,13 @@ def semantic_scan_admission(review: dict[str, Any]) -> str | None:
     it is scoped to the remote KNFSd surface.
     """
     if review["status"] == "semantically_accepted":
-        return "semantically_accepted"
+        required = (
+            review["remote_scope_verified"],
+            review["invariant_implemented"],
+            review["guards_verified"],
+            review["realistic_tests"],
+        )
+        return "semantically_accepted" if all(required) else None
     if review["status"] == "needs_revision" and review["remote_scope_verified"]:
         return "exploratory_preflight"
     return None

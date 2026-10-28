@@ -271,3 +271,5 @@ def test_semantic_needs_revision_is_advisory_when_remote_scope_is_verified() -> 
     review["status"] = "rejected"
     review["remote_scope_verified"] = True
     assert pipeline.semantic_scan_admission(review) is None
+    review["status"] = "semantically_accepted"
+    assert pipeline.semantic_scan_admission(review) is None
